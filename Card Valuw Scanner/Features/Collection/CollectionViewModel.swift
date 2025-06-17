@@ -95,6 +95,7 @@ final class CollectionViewModel {
     }
     
     /// Load sample cards for demo purposes
+    /// This is now an explicit user action and not called automatically
     func loadSampleCards() async {
         isLoading = true
         errorMessage = nil

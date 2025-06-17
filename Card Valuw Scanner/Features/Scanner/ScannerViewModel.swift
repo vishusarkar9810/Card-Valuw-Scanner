@@ -75,6 +75,14 @@ final class ScannerViewModel {
                 scanResult = potentialMatches[0]
             }
             
+            // Check if the card is already in the collection
+            if let card = scanResult, let existingCard = persistenceManager.fetchCard(withID: card.id) {
+                if existingCard.quantity > 0 {
+                    // Card is already in the collection
+                    addedToCollection = true
+                }
+            }
+            
         } catch let error as NSError {
             handleError(error)
         } catch {
@@ -217,6 +225,18 @@ final class ScannerViewModel {
         if index >= 0 && index < potentialMatches.count {
             selectedMatchIndex = index
             scanResult = potentialMatches[index]
+            
+            // Check if the newly selected card is already in the collection
+            if let card = scanResult, let existingCard = persistenceManager.fetchCard(withID: card.id) {
+                if existingCard.quantity > 0 {
+                    // Card is already in the collection
+                    addedToCollection = true
+                } else {
+                    addedToCollection = false
+                }
+            } else {
+                addedToCollection = false
+            }
         }
     }
     

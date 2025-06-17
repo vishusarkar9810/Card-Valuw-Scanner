@@ -7,9 +7,11 @@ struct ScannerView: View {
     
     @State private var capturedImage: UIImage?
     @State private var showCamera = false
+    @State private var showPhotoLibrary = false // Added state for photo library
     @State private var showResults = false
     @State private var showDebugInfo = false // Toggle for debug info
     @State private var showPotentialMatches = false // Toggle for showing potential matches
+    @State private var showAddedFeedback = false // Added for visual feedback
     
     // MARK: - Body
     
@@ -80,7 +82,12 @@ struct ScannerView: View {
                 }
             }
             .sheet(isPresented: $showCamera) {
+                // Use the camera view with camera source type
                 CardScannerCameraView(capturedImage: $capturedImage, isPresented: $showCamera)
+            }
+            .sheet(isPresented: $showPhotoLibrary) {
+                // Use UIImagePickerController directly for photo library
+                ImagePicker(selectedImage: $capturedImage, sourceType: .photoLibrary)
             }
             .sheet(isPresented: $showPotentialMatches) {
                 potentialMatchesView
@@ -93,6 +100,36 @@ struct ScannerView: View {
                     }
                 }
             }
+            // Add an overlay for feedback when card is added
+            .overlay(
+                Group {
+                    if showAddedFeedback {
+                        VStack {
+                            Spacer()
+                            HStack {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.white)
+                                Text("Added to Collection!")
+                                    .foregroundColor(.white)
+                                    .fontWeight(.semibold)
+                            }
+                            .padding()
+                            .background(Color.green.opacity(0.9))
+                            .cornerRadius(10)
+                            .padding(.bottom, 50)
+                        }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear {
+                            // Hide the feedback after 2 seconds
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                                withAnimation {
+                                    showAddedFeedback = false
+                                }
+                            }
+                        }
+                    }
+                }
+            )
         }
     }
     
@@ -134,9 +171,9 @@ struct ScannerView: View {
                     .cornerRadius(12)
                 }
                 
-                // Alternative option for simulators or testing
+                // Fixed button for photo library
                 Button(action: {
-                    showCamera = true
+                    showPhotoLibrary = true
                 }) {
                     HStack {
                         Image(systemName: "photo")
@@ -386,17 +423,21 @@ struct ScannerView: View {
                     // Add to collection button
                     Button(action: {
                         if model.addToCollection() {
-                            // Show success feedback
+                            // Show success feedback with animation
+                            withAnimation(.easeInOut) {
+                                showAddedFeedback = true
+                            }
                         }
                     }) {
-                        Text("Add to Collection")
+                        Text(model.addedToCollection ? "Added to Collection" : "Add to Collection")
                             .font(.headline)
                             .foregroundColor(.white)
                             .padding()
                             .frame(maxWidth: .infinity)
-                            .background(Color.green)
+                            .background(model.addedToCollection ? Color.gray : Color.green)
                             .cornerRadius(12)
                     }
+                    .disabled(model.addedToCollection)
                     .padding(.vertical)
                 }
                 .padding()
@@ -493,5 +534,45 @@ struct ScannerView: View {
         dateFormatter.dateStyle = .medium
         dateFormatter.timeStyle = .none
         return dateFormatter.string(from: date)
+    }
+}
+
+// Simple ImagePicker for photo library
+struct ImagePicker: UIViewControllerRepresentable {
+    @Binding var selectedImage: UIImage?
+    var sourceType: UIImagePickerController.SourceType
+    @Environment(\.presentationMode) private var presentationMode
+    
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.delegate = context.coordinator
+        picker.sourceType = sourceType
+        picker.allowsEditing = false
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+    
+    class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+        
+        init(_ parent: ImagePicker) {
+            self.parent = parent
+        }
+        
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey : Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.selectedImage = image
+            }
+            parent.presentationMode.wrappedValue.dismiss()
+        }
+        
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.presentationMode.wrappedValue.dismiss()
+        }
     }
 } 

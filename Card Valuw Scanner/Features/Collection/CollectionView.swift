@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct CollectionView: View {
     // MARK: - Properties
@@ -86,11 +87,8 @@ struct CollectionView: View {
                 CardDetailView(card: card)
             }
             .task {
-                if model.cardEntities.isEmpty {
-                    await model.loadSampleCards()
-                } else {
-                    model.loadCollection()
-                }
+                // Just load the collection without adding sample cards
+                model.loadCollection()
             }
             .refreshable {
                 model.loadCollection()
@@ -129,9 +127,7 @@ struct CollectionView: View {
                 .padding(.horizontal)
             
             Button(action: {
-                Task {
-                    await model.loadSampleCards()
-                }
+                model.loadCollection()
             }) {
                 Text("Try Again")
                     .font(.headline)
@@ -154,23 +150,28 @@ struct CollectionView: View {
                 .font(.title)
                 .fontWeight(.bold)
             
-            Text("Scan cards to add them to your collection")
+            Text("Scan cards using the camera to add them to your collection")
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
             Button(action: {
-                Task {
-                    await model.loadSampleCards()
+                // Navigate to scanner tab
+                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+                   let tabBarController = windowScene.windows.first?.rootViewController as? UITabBarController {
+                    tabBarController.selectedIndex = 0 // Assuming Scanner is the first tab
                 }
             }) {
-                Text("Load Sample Cards")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                HStack {
+                    Image(systemName: "camera")
+                    Text("Scan Cards")
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.blue)
+                .cornerRadius(12)
             }
         }
         .padding()
