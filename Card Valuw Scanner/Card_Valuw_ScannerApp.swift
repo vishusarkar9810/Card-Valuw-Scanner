@@ -11,7 +11,7 @@ import SwiftUI
 struct Card_Valuw_ScannerApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            MainTabView()
         }
     }
 }
