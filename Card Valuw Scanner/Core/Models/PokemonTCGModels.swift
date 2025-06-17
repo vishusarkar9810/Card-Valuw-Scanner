@@ -26,6 +26,8 @@ struct Card: Codable, Identifiable, Hashable {
     let images: CardImages
     let tcgplayer: TcgPlayer?
     let cardmarket: CardMarket?
+    let number: String?
+    let set: Set?
     // Add other properties as needed
     
     // Hashable implementation

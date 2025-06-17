@@ -35,7 +35,7 @@ struct MainTabView: View {
         
         // Initialize view models
         self.scannerViewModel = ScannerViewModel(
-            cardScannerService: cardScannerService,
+            cardScannerService: cardScannerService, 
             pokemonTCGService: pokemonTCGService,
             persistenceManager: tempPersistenceManager
         )

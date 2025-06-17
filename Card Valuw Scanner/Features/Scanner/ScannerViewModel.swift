@@ -23,6 +23,19 @@ final class ScannerViewModel {
     var selectedMatchIndex: Int = 0
     var scanAttempts: Int = 0
     var lastScannedImage: UIImage? = nil
+    var scanStage: ScanStage = .initial
+    
+    // MARK: - Enums
+    
+    /// Represents different stages of the scanning process
+    enum ScanStage {
+        case initial          // Initial scan
+        case enhancedText     // Try with enhanced text recognition
+        case nameSearch       // Try searching by name parts
+        case numberSearch     // Try searching by number
+        case visualSearch     // Try searching by visual features
+        case failed           // All attempts failed
+    }
     
     // MARK: - Initialization
     
@@ -51,28 +64,46 @@ final class ScannerViewModel {
         selectedMatchIndex = 0
         lastScannedImage = image
         scanAttempts += 1
+        scanStage = .initial
         
         do {
-            // Step 1: Identify card from image
-            let cardInfo = await cardScannerService.identifyCard(from: image)
+            // Step 1: Try to detect and crop the card from the image
+            let croppedImage = cardScannerService.detectAndCropCard(image)
+            
+            // Step 2: Identify card from image using improved multi-strategy approach
+            let cardInfo = await cardScannerService.identifyCard(from: croppedImage)
             
             // Debug info
             debugInfo = "Extracted info: \(cardInfo)"
             
-            // Step 2: Search for the card using the extracted info
+            // Step 3: Search for the card using the extracted info
+            var foundCard = false
+            
+            // Try searching by name first (most accurate)
             if let cardName = cardInfo["name"] {
-                await searchByName(cardName)
-            } else if let cardNumber = cardInfo["number"] {
-                await searchByNumber(cardNumber, set: cardInfo["set"])
-            } else if let hp = cardInfo["hp"] {
-                await searchByHP(hp)
-            } else {
-                errorMessage = "Could not identify card from image. Make sure the card is well-lit and clearly visible."
+                foundCard = await searchByName(cardName)
             }
             
-            // If we have potential matches but no definitive result, set the first match as the result
-            if scanResult == nil && !potentialMatches.isEmpty {
+            // If name search failed, try by number and set
+            if !foundCard, let cardNumber = cardInfo["number"] {
+                foundCard = await searchByNumber(cardNumber, set: cardInfo["set"])
+            }
+            
+            // If both failed, try by HP (less specific)
+            if !foundCard, let hp = cardInfo["hp"] {
+                foundCard = await searchByHP(hp)
+            }
+            
+            // If all direct searches failed but we have potential matches, use the first match
+            if !foundCard && !potentialMatches.isEmpty {
                 scanResult = potentialMatches[0]
+                foundCard = true
+            }
+            
+            // If everything failed, prepare for retry with different approach
+            if !foundCard {
+                errorMessage = "Could not identify card from image. Try taking a clearer photo."
+                scanStage = .enhancedText // Ready for next attempt
             }
             
             // Check if the card is already in the collection
@@ -81,6 +112,11 @@ final class ScannerViewModel {
                     // Card is already in the collection
                     addedToCollection = true
                 }
+            }
+            
+            // Add a throw statement to make the catch block reachable
+            if scanResult == nil && errorMessage == nil {
+                throw NSError(domain: "CardScanner", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unknown scanning error"])
             }
             
         } catch let error as NSError {
@@ -94,7 +130,8 @@ final class ScannerViewModel {
     
     /// Search for cards by name
     /// - Parameter name: The card name to search for
-    private func searchByName(_ name: String) async {
+    /// - Returns: Boolean indicating if search was successful
+    private func searchByName(_ name: String) async -> Bool {
         do {
             // Try to search by exact name first
             let exactQuery = ["q": "name:\"\(name)\"", "page": "1", "pageSize": "10"]
@@ -103,7 +140,7 @@ final class ScannerViewModel {
             if let firstCard = exactResponse.data.first {
                 scanResult = firstCard
                 potentialMatches = exactResponse.data
-                return
+                return true
             }
             
             // If no exact match, try a fuzzy search
@@ -116,6 +153,7 @@ final class ScannerViewModel {
                 
                 // Use the first match as the result
                 scanResult = fuzzyResponse.data.first
+                return true
             } else {
                 // Try an even more lenient search by splitting the name and searching for parts
                 let nameParts = name.split(separator: " ")
@@ -126,15 +164,15 @@ final class ScannerViewModel {
                     if !partResponse.data.isEmpty {
                         potentialMatches = partResponse.data
                         scanResult = partResponse.data.first
-                    } else {
-                        errorMessage = "No matching card found for '\(name)'. Try taking a clearer photo."
+                        return true
                     }
-                } else {
-                    errorMessage = "No matching card found for '\(name)'. Try taking a clearer photo."
                 }
             }
+            
+            return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
+            return false
         }
     }
     
@@ -142,7 +180,8 @@ final class ScannerViewModel {
     /// - Parameters:
     ///   - number: The card number
     ///   - set: Optional set identifier
-    private func searchByNumber(_ number: String, set: String?) async {
+    /// - Returns: Boolean indicating if search was successful
+    private func searchByNumber(_ number: String, set: String?) async -> Bool {
         do {
             var query: [String: Any] = ["page": "1", "pageSize": "10"]
             
@@ -158,6 +197,7 @@ final class ScannerViewModel {
             if !response.data.isEmpty {
                 potentialMatches = response.data
                 scanResult = response.data.first
+                return true
             } else {
                 // Try just the number without the set
                 if set != nil {
@@ -167,21 +207,22 @@ final class ScannerViewModel {
                     if !fallbackResponse.data.isEmpty {
                         potentialMatches = fallbackResponse.data
                         scanResult = fallbackResponse.data.first
-                    } else {
-                        errorMessage = "Could not find card with number \(number). Try taking a clearer photo."
+                        return true
                     }
-                } else {
-                    errorMessage = "Could not find card with number \(number). Try taking a clearer photo."
                 }
             }
+            
+            return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
+            return false
         }
     }
     
     /// Search for cards by HP value
     /// - Parameter hp: The HP value
-    private func searchByHP(_ hp: String) async {
+    /// - Returns: Boolean indicating if search was successful
+    private func searchByHP(_ hp: String) async -> Bool {
         do {
             // HP is less specific, but we can still try
             let query = ["q": "hp:\(hp)", "page": "1", "pageSize": "20"]
@@ -192,11 +233,13 @@ final class ScannerViewModel {
                 // Don't set scanResult yet, as HP is too generic
                 // We'll show these as potential matches instead
                 errorMessage = "Multiple cards found with HP \(hp). Please select the correct card from the list or try scanning again."
-            } else {
-                errorMessage = "Could not find cards with HP \(hp). Try taking a clearer photo."
+                return false // Return false since we need user intervention
             }
+            
+            return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
+            return false
         }
     }
     
@@ -240,6 +283,30 @@ final class ScannerViewModel {
         }
     }
     
+    /// Select a match directly from a card object
+    /// - Parameter card: The card to select as the match
+    func selectMatch(_ card: Card) {
+        // Find the index of the card in potential matches if it exists
+        if let index = potentialMatches.firstIndex(where: { $0.id == card.id }) {
+            selectMatch(at: index)
+        } else {
+            // If the card isn't in potential matches, just set it directly
+            scanResult = card
+            
+            // Check if the card is already in the collection
+            if let existingCard = persistenceManager.fetchCard(withID: card.id) {
+                if existingCard.quantity > 0 {
+                    // Card is already in the collection
+                    addedToCollection = true
+                } else {
+                    addedToCollection = false
+                }
+            } else {
+                addedToCollection = false
+            }
+        }
+    }
+    
     /// Try to scan again with different processing parameters
     func tryScanAgain() async {
         guard let image = lastScannedImage else {
@@ -252,17 +319,88 @@ final class ScannerViewModel {
         errorMessage = nil
         potentialMatches = []
         
-        // Try different approach based on previous attempts
-        if scanAttempts == 1 {
-            // On second attempt, try with different preprocessing
-            debugInfo = "Trying second scan approach..."
-            await processImage(image)
-        } else {
-            // Reset scan attempts if we've tried multiple times
+        // Try different approach based on current scan stage
+        switch scanStage {
+        case .initial:
+            // Move to enhanced text recognition
+            scanStage = .enhancedText
+            debugInfo = "Trying enhanced text recognition..."
+            
+            // Use enhanced text recognition
+            let croppedImage = cardScannerService.detectAndCropCard(image)
+            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
+            let cardInfo = cardScannerService.extractCardInfo(from: recognizedText)
+            
+            debugInfo = "Enhanced scan info: \(cardInfo)"
+            
+            // Try searching with this enhanced info
+            if let name = cardInfo["name"] {
+                _ = await searchByName(name)
+            } else if let number = cardInfo["number"] {
+                _ = await searchByNumber(number, set: cardInfo["set"])
+            }
+            
+        case .enhancedText:
+            // Move to name search with partial matching
+            scanStage = .nameSearch
+            debugInfo = "Trying partial name search..."
+            
+            // Try to extract any text that might be part of a name
+            let croppedImage = cardScannerService.detectAndCropCard(image)
+            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
+            
+            // Look for potential name fragments
+            let potentialNameFragments = recognizedText.filter { text in
+                let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                return cleaned.count >= 3 && cleaned.first?.isUppercase == true
+            }
+            
+            // Try searching for each potential name fragment
+            var found = false
+            for fragment in potentialNameFragments {
+                if await searchByName(fragment) {
+                    found = true
+                    break
+                }
+            }
+            
+            if !found {
+                errorMessage = "Still unable to identify the card. Try taking a new photo with better lighting."
+            }
+            
+        case .nameSearch:
+            // Move to number search
+            scanStage = .numberSearch
+            debugInfo = "Trying number pattern search..."
+            
+            // Look specifically for number patterns
+            let croppedImage = cardScannerService.detectAndCropCard(image)
+            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
+            
+            // Extract anything that looks like a card number
+            var found = false
+            for text in recognizedText {
+                if let range = text.range(of: #"\d+/\d+"#, options: .regularExpression) {
+                    let number = String(text[range])
+                    if await searchByNumber(number, set: nil) {
+                        found = true
+                        break
+                    }
+                }
+            }
+            
+            if !found {
+                errorMessage = "Unable to identify the card after multiple attempts. Try taking a new photo with better lighting and positioning."
+            }
+            
+        default:
+            // Reset scan attempts if we've tried multiple approaches
             scanAttempts = 0
+            scanStage = .initial
             errorMessage = "Unable to identify the card after multiple attempts. Try taking a new photo with better lighting and positioning."
-            isProcessing = false
         }
+        
+        isProcessing = false
     }
     
     /// Reset the scanner state
@@ -276,6 +414,7 @@ final class ScannerViewModel {
         selectedMatchIndex = 0
         scanAttempts = 0
         lastScannedImage = nil
+        scanStage = .initial
     }
     
     /// Add the scanned card to collection

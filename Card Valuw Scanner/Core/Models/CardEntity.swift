@@ -66,9 +66,9 @@ final class CardEntity {
             imageLargeURL: card.images.large,
             types: card.types ?? [],
             rarity: nil, // Add this if available in Card model
-            setID: nil, // Add this if available in Card model
-            setName: nil, // Add this if available in Card model
-            number: nil, // Add this if available in Card model
+            setID: card.set?.id,
+            setName: card.set?.name,
+            number: card.number,
             artist: nil, // Add this if available in Card model
             currentPrice: card.tcgplayer?.prices?.normal?.market ?? 
                          card.tcgplayer?.prices?.holofoil?.market ?? 
@@ -100,19 +100,38 @@ extension CardEntity {
             tcgPlayer = TcgPlayer(url: "", updatedAt: "", prices: prices)
         }
         
+        // Create Set if setID and setName are available
+        var set: Set? = nil
+        if let setID = setID, let setName = setName {
+            // Create a minimal Set with required properties
+            let setImages = SetImages(symbol: "", logo: "")
+            set = Set(
+                id: setID,
+                name: setName,
+                series: "",
+                printedTotal: 0,
+                total: 0,
+                legalities: nil,
+                releaseDate: "",
+                images: setImages
+            )
+        }
+        
         return Card(
             id: id,
             name: name,
             supertype: supertype,
             subtypes: nil,
             hp: nil,
-            types: types.isEmpty ? nil : types,
+            types: types,
             evolvesFrom: nil,
             evolvesTo: nil,
             rules: nil,
             images: cardImages,
             tcgplayer: tcgPlayer,
-            cardmarket: nil
+            cardmarket: nil,
+            number: number,
+            set: set
         )
     }
 } 
