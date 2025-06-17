@@ -9,6 +9,7 @@ struct ScannerView: View {
     @State private var showCamera = false
     @State private var showResults = false
     @State private var showDebugInfo = false // Toggle for debug info
+    @State private var showPotentialMatches = false // Toggle for showing potential matches
     
     // MARK: - Body
     
@@ -66,9 +67,23 @@ struct ScannerView: View {
                     }
                 }
                 #endif
+                
+                // Show potential matches button when available
+                if !model.potentialMatches.isEmpty && model.potentialMatches.count > 1 {
+                    ToolbarItem(placement: .bottomBar) {
+                        Button(action: {
+                            showPotentialMatches.toggle()
+                        }) {
+                            Label("Show \(model.potentialMatches.count) Potential Matches", systemImage: "list.bullet")
+                        }
+                    }
+                }
             }
             .sheet(isPresented: $showCamera) {
                 CardScannerCameraView(capturedImage: $capturedImage, isPresented: $showCamera)
+            }
+            .sheet(isPresented: $showPotentialMatches) {
+                potentialMatchesView
             }
             .onChange(of: capturedImage) { _, newImage in
                 if let image = newImage {
@@ -191,6 +206,26 @@ struct ScannerView: View {
                     )
             }
             
+            // Show potential matches if available
+            if !model.potentialMatches.isEmpty {
+                Text("We found \(model.potentialMatches.count) potential matches")
+                    .font(.headline)
+                    .padding(.top)
+                
+                Button(action: {
+                    showPotentialMatches = true
+                }) {
+                    Text("View Potential Matches")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.green)
+                        .cornerRadius(12)
+                }
+                .padding(.horizontal)
+            }
+            
             Spacer()
             
             VStack(spacing: 12) {
@@ -207,6 +242,26 @@ struct ScannerView: View {
                     .frame(maxWidth: .infinity)
                     .background(Color.blue)
                     .cornerRadius(12)
+                }
+                
+                // Add a button to try scanning again with the same image
+                if model.lastScannedImage != nil {
+                    Button(action: {
+                        Task {
+                            await model.tryScanAgain()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                            Text("Try Different Approach")
+                        }
+                        .font(.headline)
+                        .foregroundColor(.blue)
+                        .padding()
+                        .frame(maxWidth: .infinity)
+                        .background(Color.blue.opacity(0.1))
+                        .cornerRadius(12)
+                    }
                 }
             }
             .padding(.horizontal)
@@ -309,6 +364,23 @@ struct ScannerView: View {
                         }
                     }
                     
+                    // Show "Not the right card?" option if we have multiple potential matches
+                    if model.potentialMatches.count > 1 {
+                        Divider()
+                        
+                        Button(action: {
+                            showPotentialMatches = true
+                        }) {
+                            HStack {
+                                Image(systemName: "questionmark.circle")
+                                Text("Not the right card? View other matches")
+                                    .font(.subheadline)
+                            }
+                            .foregroundColor(.blue)
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    
                     Divider()
                     
                     // Add to collection button
@@ -328,6 +400,71 @@ struct ScannerView: View {
                     .padding(.vertical)
                 }
                 .padding()
+            }
+        }
+    }
+    
+    // View for showing potential matches
+    private var potentialMatchesView: some View {
+        NavigationStack {
+            List {
+                ForEach(model.potentialMatches.indices, id: \.self) { index in
+                    let card = model.potentialMatches[index]
+                    HStack {
+                        if let imageURL = URL(string: card.images.small) {
+                            AsyncImage(url: imageURL) { phase in
+                                if let image = phase.image {
+                                    image
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 60)
+                                        .cornerRadius(4)
+                                } else {
+                                    Rectangle()
+                                        .foregroundColor(.gray.opacity(0.2))
+                                        .frame(width: 60, height: 80)
+                                }
+                            }
+                        }
+                        
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(card.name)
+                                .font(.headline)
+                            
+                            HStack {
+                                Text(card.supertype)
+                                    .font(.caption)
+                                
+                                if let hp = card.hp {
+                                    Text("• HP: \(hp)")
+                                        .font(.caption)
+                                }
+                            }
+                            .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        if index == model.selectedMatchIndex {
+                            Image(systemName: "checkmark.circle.fill")
+                                .foregroundColor(.green)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        model.selectMatch(at: index)
+                        showPotentialMatches = false
+                    }
+                }
+            }
+            .navigationTitle("Potential Matches")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        showPotentialMatches = false
+                    }
+                }
             }
         }
     }
