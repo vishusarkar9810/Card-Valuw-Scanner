@@ -6,12 +6,28 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct Card_Valuw_ScannerApp: App {
+    // Set up the model container for SwiftData
+    var modelContainer: ModelContainer
+    
+    init() {
+        do {
+            // Create a model container for CardEntity
+            let schema = Schema([CardEntity.self])
+            let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
+            self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
+        } catch {
+            fatalError("Failed to create model container: \(error.localizedDescription)")
+        }
+    }
+    
     var body: some Scene {
         WindowGroup {
             MainTabView()
         }
+        .modelContainer(modelContainer)
     }
 }

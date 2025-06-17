@@ -8,6 +8,7 @@ struct ScannerView: View {
     @State private var capturedImage: UIImage?
     @State private var showCamera = false
     @State private var showResults = false
+    @State private var showDebugInfo = false // Toggle for debug info
     
     // MARK: - Body
     
@@ -23,6 +24,26 @@ struct ScannerView: View {
                 } else {
                     initialView
                 }
+                
+                // Debug info section (only visible in DEBUG mode)
+                #if DEBUG
+                if showDebugInfo, let debugInfo = model.debugInfo {
+                    VStack(alignment: .leading) {
+                        Text("Debug Info:")
+                            .font(.headline)
+                        
+                        Text(debugInfo)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding()
+                            .background(Color.gray.opacity(0.1))
+                            .cornerRadius(8)
+                    }
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.yellow.opacity(0.1))
+                }
+                #endif
             }
             .navigationTitle("Card Scanner")
             .toolbar {
@@ -32,8 +53,19 @@ struct ScannerView: View {
                     }) {
                         Image(systemName: "arrow.clockwise")
                     }
-                    .disabled(model.isProcessing || model.scanResult == nil && model.errorMessage == nil)
+                    .disabled(model.isProcessing || (model.scanResult == nil && model.errorMessage == nil))
                 }
+                
+                // Debug toggle in DEBUG mode
+                #if DEBUG
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: {
+                        showDebugInfo.toggle()
+                    }) {
+                        Image(systemName: showDebugInfo ? "ladybug.fill" : "ladybug")
+                    }
+                }
+                #endif
             }
             .sheet(isPresented: $showCamera) {
                 CardScannerCameraView(capturedImage: $capturedImage, isPresented: $showCamera)
@@ -71,18 +103,39 @@ struct ScannerView: View {
             
             Spacer()
             
-            Button(action: {
-                showCamera = true
-            }) {
-                Text("Start Scanning")
+            VStack(spacing: 12) {
+                Button(action: {
+                    showCamera = true
+                }) {
+                    HStack {
+                        Image(systemName: "camera")
+                        Text("Take Photo")
+                    }
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(Color.blue)
                     .cornerRadius(12)
-                    .padding(.horizontal)
+                }
+                
+                // Alternative option for simulators or testing
+                Button(action: {
+                    showCamera = true
+                }) {
+                    HStack {
+                        Image(systemName: "photo")
+                        Text("Choose from Library")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.blue)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(12)
+                }
             }
+            .padding(.horizontal)
             .padding(.bottom)
         }
     }
@@ -98,6 +151,10 @@ struct ScannerView: View {
             Text("Analyzing card...")
                 .font(.headline)
                 .padding()
+            
+            Text("This may take a moment")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
             
             Spacer()
         }
@@ -121,20 +178,38 @@ struct ScannerView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
+            if let capturedImage = capturedImage {
+                Image(uiImage: capturedImage)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(height: 200)
+                    .cornerRadius(12)
+                    .padding()
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12)
+                            .stroke(Color.red, lineWidth: 2)
+                    )
+            }
+            
             Spacer()
             
-            Button(action: {
-                showCamera = true
-            }) {
-                Text("Try Again")
+            VStack(spacing: 12) {
+                Button(action: {
+                    showCamera = true
+                }) {
+                    HStack {
+                        Image(systemName: "camera")
+                        Text("Try Again")
+                    }
                     .font(.headline)
                     .foregroundColor(.white)
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(Color.blue)
                     .cornerRadius(12)
-                    .padding(.horizontal)
+                }
             }
+            .padding(.horizontal)
             .padding(.bottom)
         }
     }

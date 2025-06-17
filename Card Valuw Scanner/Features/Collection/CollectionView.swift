@@ -45,6 +45,11 @@ struct CollectionView: View {
                         Button("Sort by Set") {
                             // Sort by set
                         }
+                        Divider()
+                        Button(model.showFavoritesOnly ? "Show All Cards" : "Show Favorites Only") {
+                            model.showFavoritesOnly.toggle()
+                            model.applyFilters()
+                        }
                     } label: {
                         Image(systemName: "arrow.up.arrow.down")
                     }
@@ -53,9 +58,7 @@ struct CollectionView: View {
             .searchable(text: $searchText, prompt: "Search your collection")
             .onChange(of: searchText) { _, newValue in
                 model.searchText = newValue
-                Task {
-                    await model.searchCards()
-                }
+                model.applyFilters()
             }
             .sheet(isPresented: $showingFilters) {
                 FilterView(
@@ -63,21 +66,18 @@ struct CollectionView: View {
                     selectedSets: model.selectedSets,
                     onTypeSelection: { types in
                         model.selectedTypes = types
+                        model.applyFilters()
                     },
                     onSetSelection: { sets in
                         model.selectedSets = sets
+                        model.applyFilters()
                     },
                     onApply: {
-                        Task {
-                            await model.searchCards()
-                        }
+                        model.applyFilters()
                     },
                     onReset: {
                         model.resetFilters()
                         searchText = ""
-                        Task {
-                            await model.searchCards()
-                        }
                     }
                 )
                 .presentationDetents([.medium, .large])
@@ -86,9 +86,14 @@ struct CollectionView: View {
                 CardDetailView(card: card)
             }
             .task {
-                if model.cards.isEmpty {
+                if model.cardEntities.isEmpty {
                     await model.loadSampleCards()
+                } else {
+                    model.loadCollection()
                 }
+            }
+            .refreshable {
+                model.loadCollection()
             }
         }
     }
@@ -154,6 +159,19 @@ struct CollectionView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+            
+            Button(action: {
+                Task {
+                    await model.loadSampleCards()
+                }
+            }) {
+                Text("Load Sample Cards")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(12)
+            }
         }
         .padding()
     }
@@ -163,6 +181,35 @@ struct CollectionView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 16) {
                 ForEach(model.cards) { card in
                     CardGridItem(card: card)
+                        .contextMenu {
+                            Button(action: {
+                                model.toggleFavorite(for: card)
+                            }) {
+                                Label(
+                                    model.cardEntities.first(where: { $0.id == card.id })?.isFavorite == true ? "Remove from Favorites" : "Add to Favorites",
+                                    systemImage: model.cardEntities.first(where: { $0.id == card.id })?.isFavorite == true ? "star.fill" : "star"
+                                )
+                            }
+                            
+                            Button(action: {
+                                model.increaseCardQuantity(with: card.id)
+                                model.loadCollection()
+                            }) {
+                                Label("Add One More", systemImage: "plus.circle")
+                            }
+                            
+                            Button(action: {
+                                model.decreaseCardQuantity(with: card.id)
+                            }) {
+                                Label("Remove One", systemImage: "minus.circle")
+                            }
+                            
+                            Button(role: .destructive, action: {
+                                model.removeCard(with: card.id)
+                            }) {
+                                Label("Remove All", systemImage: "trash")
+                            }
+                        }
                         .onTapGesture {
                             selectedCard = card
                         }
@@ -180,7 +227,7 @@ struct CollectionView: View {
                         Text("Total Cards")
                             .font(.subheadline)
                             .foregroundColor(.secondary)
-                        Text("\(model.cards.count)")
+                        Text("\(model.cardEntities.map { $0.quantity }.reduce(0, +))")
                             .font(.title2)
                             .fontWeight(.bold)
                     }
@@ -199,9 +246,9 @@ struct CollectionView: View {
                 .padding()
                 .background(Color.blue.opacity(0.1))
                 .cornerRadius(12)
+                .padding(.horizontal)
             }
-            .padding(.horizontal)
-            .padding(.bottom)
+            .padding(.vertical)
         }
     }
 }

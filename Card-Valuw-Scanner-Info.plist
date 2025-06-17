@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
     <key>POKEMON_TCG_API_KEY</key>
-    <string>your_api_key_here</string>
+    <string>70175cc6-fd47-4648-8143-ac5a4438895e</string>
     
     <key>NSCameraUsageDescription</key>
     <string>We need camera access to scan Pokemon cards</string>

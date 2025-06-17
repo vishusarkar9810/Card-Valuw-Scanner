@@ -9,8 +9,16 @@ struct CameraView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIImagePickerController {
         let picker = UIImagePickerController()
         picker.delegate = context.coordinator
-        picker.sourceType = .camera
-        picker.cameraCaptureMode = .photo
+        
+        // Check if camera is available, otherwise use photo library
+        if UIImagePickerController.isSourceTypeAvailable(.camera) {
+            picker.sourceType = .camera
+            picker.cameraCaptureMode = .photo
+        } else {
+            // Fallback to photo library for simulator or devices without camera
+            picker.sourceType = .photoLibrary
+        }
+        
         picker.modalPresentationStyle = .fullScreen
         return picker
     }
@@ -45,46 +53,53 @@ struct CameraView: UIViewControllerRepresentable {
 struct CardScannerCameraView: View {
     @Binding var capturedImage: UIImage?
     @Binding var isPresented: Bool
+    @State private var sourceType: UIImagePickerController.SourceType = .camera
     
     var body: some View {
         ZStack {
-            CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
-            
-            // Card scanning overlay
-            VStack {
-                Spacer()
-                
-                Text("Position the card within the frame")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.black.opacity(0.6))
-                    .cornerRadius(10)
-                
-                // Card frame overlay
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.white, lineWidth: 3)
-                    .frame(width: 300, height: 420) // Standard card aspect ratio
-                    .padding(.vertical, 40)
-                
-                Spacer()
-                
-                Button(action: {
-                    // This button is just a visual indicator
-                    // The actual capture is handled by the UIImagePickerController
-                }) {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 70, height: 70)
-                        .overlay(
-                            Circle()
-                                .stroke(Color.black.opacity(0.8), lineWidth: 2)
-                                .frame(width: 60, height: 60)
-                        )
-                }
-                .padding(.bottom, 30)
+            // Show different UI based on source type
+            if sourceType == .camera && UIImagePickerController.isSourceTypeAvailable(.camera) {
+                CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
+                    .overlay(cameraOverlay)
+            } else {
+                // Photo library view doesn't need the overlay
+                CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
+            }
+        }
+        .onAppear {
+            // Set the appropriate source type based on device capabilities
+            if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                sourceType = .camera
+            } else {
+                sourceType = .photoLibrary
             }
         }
         .edgesIgnoringSafeArea(.all)
+    }
+    
+    // Camera overlay with card frame - but WITHOUT a custom capture button
+    private var cameraOverlay: some View {
+        VStack {
+            Spacer()
+            
+            Text("Position the card within the frame")
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.black.opacity(0.6))
+                .cornerRadius(10)
+            
+            // Card frame overlay
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.white, lineWidth: 3)
+                .frame(width: 300, height: 420) // Standard card aspect ratio
+                .padding(.vertical, 40)
+            
+            Spacer()
+            
+            // Remove the custom capture button that was causing the overlap
+            // Let the system's native camera button handle the capture
+            Spacer().frame(height: 100) // Add space at the bottom to avoid overlapping with system UI
+        }
     }
 } 
