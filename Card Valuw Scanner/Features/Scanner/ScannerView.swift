@@ -246,19 +246,83 @@ struct ScannerView: View {
                 .padding(.horizontal)
             
             if let image = model.lastScannedImage {
-                Image(uiImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .frame(height: 200)
-                    .cornerRadius(12)
-                    .padding()
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.gray.opacity(0.5), lineWidth: 1)
-                    )
+                VStack {
+                    Image(uiImage: image)
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                        .frame(height: 200)
+                        .cornerRadius(12)
+                        .padding()
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(Color.gray.opacity(0.5), lineWidth: 1)
+                        )
+                    
+                    // Show progress indicators for different recognition stages
+                    HStack(spacing: 20) {
+                        ScanStageIndicator(
+                            title: "Detect",
+                            isActive: true,
+                            isComplete: true
+                        )
+                        
+                        ScanStageIndicator(
+                            title: "Recognize",
+                            isActive: true,
+                            isComplete: model.scanStage != .initial
+                        )
+                        
+                        ScanStageIndicator(
+                            title: "Match",
+                            isActive: model.scanStage != .initial,
+                            isComplete: model.scanResult != nil
+                        )
+                    }
+                    .padding(.top, 8)
+                }
             }
             
             Spacer()
+        }
+    }
+    
+    // A visual indicator for scan stages
+    private struct ScanStageIndicator: View {
+        let title: String
+        let isActive: Bool
+        let isComplete: Bool
+        
+        var body: some View {
+            VStack(spacing: 4) {
+                ZStack {
+                    Circle()
+                        .fill(backgroundColor)
+                        .frame(width: 30, height: 30)
+                    
+                    if isComplete {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundColor(.white)
+                    } else if isActive {
+                        ProgressView()
+                            .scaleEffect(0.7)
+                    }
+                }
+                
+                Text(title)
+                    .font(.caption)
+                    .foregroundColor(isActive ? .primary : .secondary)
+            }
+        }
+        
+        private var backgroundColor: Color {
+            if isComplete {
+                return .green
+            } else if isActive {
+                return .blue
+            } else {
+                return .gray.opacity(0.3)
+            }
         }
     }
     
@@ -579,63 +643,108 @@ struct ScannerView: View {
     
     private var potentialMatchesView: some View {
         NavigationStack {
-            List {
+            VStack(spacing: 0) {
                 if let image = model.lastScannedImage {
-                    Section(header: Text("Scanned Image")) {
-                        HStack {
-                            Spacer()
-                            Image(uiImage: image)
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                                .frame(height: 200)
-                                .cornerRadius(8)
-                            Spacer()
-                        }
+                    // Header with scanned image
+                    VStack {
+                        Text("Scanned Image")
+                            .font(.headline)
+                            .padding(.top)
+                        
+                        Image(uiImage: image)
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                            .frame(height: 150)
+                            .cornerRadius(8)
+                            .padding(.horizontal)
+                            .padding(.bottom)
                     }
+                    .background(Color.gray.opacity(0.1))
                 }
                 
-                Section(header: Text("Potential Matches")) {
-                    ForEach(model.potentialMatches) { card in
-                        Button(action: {
-                            model.selectMatch(card)
-                            showPotentialMatches = false
-                        }) {
-                            HStack {
-                                AsyncImage(url: URL(string: card.images.small)) { phase in
-                                    if let image = phase.image {
-                                        image
-                                            .resizable()
-                                            .aspectRatio(contentMode: .fit)
-                                            .frame(width: 60, height: 80)
-                                            .cornerRadius(4)
-                                    } else {
-                                        Rectangle()
-                                            .fill(Color.gray.opacity(0.2))
-                                            .frame(width: 60, height: 80)
-                                            .cornerRadius(4)
+                // Instructions
+                Text("Select the correct card from the matches below")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.blue.opacity(0.1))
+                
+                // Card matches
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 16) {
+                        ForEach(model.potentialMatches) { card in
+                            Button(action: {
+                                model.selectMatch(card)
+                                showPotentialMatches = false
+                            }) {
+                                VStack {
+                                    AsyncImage(url: URL(string: card.images.small)) { phase in
+                                        if let image = phase.image {
+                                            image
+                                                .resizable()
+                                                .aspectRatio(contentMode: .fit)
+                                                .frame(height: 180)
+                                                .cornerRadius(8)
+                                        } else if phase.error != nil {
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.2))
+                                                .frame(height: 180)
+                                                .cornerRadius(8)
+                                                .overlay(
+                                                    Image(systemName: "exclamationmark.triangle")
+                                                        .foregroundColor(.gray)
+                                                )
+                                        } else {
+                                            Rectangle()
+                                                .fill(Color.gray.opacity(0.2))
+                                                .frame(height: 180)
+                                                .cornerRadius(8)
+                                                .overlay(
+                                                    ProgressView()
+                                                )
+                                        }
                                     }
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(card.name)
-                                        .font(.headline)
                                     
-                                    if let types = card.types, !types.isEmpty {
-                                        Text(types.joined(separator: ", "))
-                                            .font(.subheadline)
-                                            .foregroundColor(.secondary)
+                                    VStack(alignment: .leading, spacing: 4) {
+                                        Text(card.name)
+                                            .font(.headline)
+                                            .lineLimit(1)
+                                        
+                                        if let number = card.number, let set = card.set {
+                                            Text("#\(number) • \(set.name)")
+                                                .font(.caption)
+                                                .foregroundColor(.secondary)
+                                                .lineLimit(1)
+                                        }
+                                        
+                                        // Show price if available
+                                        if let tcgplayer = card.tcgplayer,
+                                           let prices = tcgplayer.prices,
+                                           let normal = prices.normal,
+                                           let market = normal.market {
+                                            Text("$\(String(format: "%.2f", market))")
+                                                .font(.subheadline)
+                                                .fontWeight(.bold)
+                                                .foregroundColor(.blue)
+                                        }
                                     }
-                                    
-                                    if let number = card.number, let set = card.set {
-                                        Text("#\(number) • \(set.name)")
-                                            .font(.caption)
-                                            .foregroundColor(.secondary)
-                                    }
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .padding(.horizontal, 8)
+                                    .padding(.bottom, 8)
                                 }
+                                .background(Color.white)
+                                .cornerRadius(12)
+                                .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 12)
+                                        .stroke(Color.blue, lineWidth: card.id == model.scanResult?.id ? 3 : 0)
+                                )
                             }
+                            .buttonStyle(PlainButtonStyle())
                         }
-                        .buttonStyle(PlainButtonStyle())
                     }
+                    .padding()
                 }
             }
             .navigationTitle("Potential Matches")
@@ -750,7 +859,7 @@ struct ScannerView: View {
         case .enhancedText:
             return "Enhancing image for better text recognition..."
         case .nameSearch:
-            return "Searching for card by name fragments..."
+            return "Searching for card by name..."
         case .numberSearch:
             return "Searching for card by number..."
         case .visualSearch:

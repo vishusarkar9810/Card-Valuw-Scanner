@@ -26,6 +26,16 @@ class CardScannerService {
         "LOT", "CES", "FLI", "UPR", "CIN", "SUM"
     ]
     
+    // Common Pokemon names to help with name identification
+    private let commonPokemonNames = [
+        "Pikachu", "Charizard", "Bulbasaur", "Squirtle", "Eevee", "Mewtwo", "Gengar",
+        "Lucario", "Gardevoir", "Rayquaza", "Snorlax", "Jigglypuff", "Gyarados", "Mew",
+        "Dragonite", "Blastoise", "Venusaur", "Machamp", "Alakazam", "Tyranitar",
+        "Umbreon", "Espeon", "Vaporeon", "Jolteon", "Flareon", "Glaceon", "Leafeon",
+        "Sylveon", "Arcanine", "Lapras", "Zapdos", "Articuno", "Moltres", "Lugia",
+        "Ho-Oh", "Celebi", "Suicune", "Entei", "Raikou", "Dialga", "Palkia", "Giratina"
+    ]
+    
     // Processing strategies for multi-stage recognition
     enum ProcessingStrategy {
         case normal      // Standard processing
@@ -33,6 +43,7 @@ class CardScannerService {
         case brightened  // Increased brightness for dark cards
         case focused     // Focus on text regions only
         case edges       // Focus on card edges and borders
+        case topSection  // Focus on the top section of the card (for card name)
     }
     
     // MARK: - Card Detection and Recognition
@@ -66,7 +77,14 @@ class CardScannerService {
             // Get multiple candidates for better accuracy
             let recognizedStrings = observations.flatMap { observation in
                 // Get more candidates for better accuracy
-                observation.topCandidates(5).compactMap { $0.string }
+                observation.topCandidates(10).compactMap { candidate in
+                    // Store confidence with the string for better filtering
+                    let confidence = candidate.confidence
+                    let string = candidate.string
+                    
+                    // Only include strings with decent confidence
+                    return confidence > 0.3 ? string : nil
+                }
             }
             
             // Filter and process the results
@@ -99,6 +117,9 @@ class CardScannerService {
         case .edges:
             // Optimize for card numbers and set symbols
             textRecognitionRequest.minimumTextHeight = 0.02
+        case .topSection:
+            // Optimize for card name at the top
+            textRecognitionRequest.minimumTextHeight = 0.02
         default:
             textRecognitionRequest.minimumTextHeight = 0.015
         }
@@ -117,7 +138,7 @@ class CardScannerService {
     ///   - image: Original image
     ///   - strategy: Processing strategy to apply
     /// - Returns: Processed image
-    private func preprocessImage(_ image: UIImage, strategy: ProcessingStrategy = .normal) -> UIImage {
+    func preprocessImage(_ image: UIImage, strategy: ProcessingStrategy = .normal) -> UIImage {
         // Create a CIImage from the UIImage
         guard let ciImage = CIImage(image: image) else {
             return image
@@ -159,6 +180,18 @@ class CardScannerService {
         case .edges:
             // Enhance edges for better card detection
             processedImage = applyEdgeDetection(to: ciImage)
+            
+        case .topSection:
+            // Crop to the top 20% of the card where the name usually is
+            let extent = ciImage.extent
+            let topSection = CGRect(x: extent.origin.x, 
+                                   y: extent.origin.y + extent.height * 0.8, 
+                                   width: extent.width, 
+                                   height: extent.height * 0.2)
+            processedImage = ciImage.cropped(to: topSection)
+            processedImage = applyNormalization(to: processedImage)
+            processedImage = applySharpen(to: processedImage, intensity: 2.0)
+            processedImage = applyContrast(to: processedImage, amount: 1.5)
         }
         
         // Convert back to UIImage
@@ -264,9 +297,6 @@ class CardScannerService {
         // First try to detect rectangular shapes that might be cards
         let edgeProcessedImage = preprocessImage(image, strategy: .edges)
         
-        // For now, we'll implement a basic version that looks for rectangular shapes
-        // In a complete implementation, we'd use VNDetectRectanglesRequest to find the card
-        
         // Create a CIDetector for rectangles
         guard let detector = CIDetector(ofType: CIDetectorTypeRectangle, 
                                        context: nil, 
@@ -320,11 +350,27 @@ class CardScannerService {
             }
         }
         
+        // Add top section strategy specifically for card name detection
+        let topSectionResults = await withCheckedContinuation { continuation in
+            recognizeText(in: image, strategy: .topSection) { strings in
+                continuation.resume(returning: strings)
+            }
+        }
+        
         // Combine and deduplicate results
         var combinedResults = normalResults
+        
         for string in enhancedResults {
             if !combinedResults.contains(string) {
                 combinedResults.append(string)
+            }
+        }
+        
+        // Give priority to top section results as they're likely to contain the card name
+        for string in topSectionResults {
+            if !combinedResults.contains(string) {
+                // Insert at the beginning to give higher priority
+                combinedResults.insert(string, at: 0)
             }
         }
         
@@ -376,9 +422,9 @@ class CardScannerService {
                 
                 if !hpDigits.isEmpty {
                     cardInfo["hp"] = hpDigits
+                }
             }
-        }
-        
+            
             // Look for potential card names
             evaluatePotentialCardName(cleanText, potentialNames: &potentialNames)
             
@@ -456,6 +502,31 @@ class CardScannerService {
                 score += 3
             }
             
+            // Check if the text contains a known Pokemon name
+            for pokemonName in commonPokemonNames {
+                if text.contains(pokemonName) {
+                    score += 5 // Very high confidence if it contains a known Pokemon name
+                    break
+                }
+            }
+            
+            // Check if the text looks like a complete Pokemon name (e.g., "Pikachu V")
+            for pokemonName in commonPokemonNames {
+                if text == pokemonName {
+                    score += 8 // Extremely high confidence for exact match
+                    break
+                }
+                
+                // Common patterns like "Pikachu V", "Charizard GX"
+                let patterns = [" V", " GX", " EX", " VMAX", " VSTAR"]
+                for pattern in patterns {
+                    if text == pokemonName + pattern {
+                        score += 10 // Highest confidence for exact Pokemon name with variant
+                        break
+                    }
+                }
+            }
+            
             // Add to potential names if score is positive
             if score > 0 {
                 potentialNames.append((text, score))
@@ -498,21 +569,6 @@ class CardScannerService {
     }
     
     /// Identifies a card from an image using multiple strategies
-    /// - Parameters:
-    ///   - image: The card image
-    ///   - completion: Callback with potential card info or empty dictionary if failed
-    func identifyCard(from image: UIImage, completion: @escaping ([String: String]) -> Void) {
-        // First try to detect and crop the card
-        let croppedImage = detectAndCropCard(image)
-        
-        // Then recognize text from the cropped image
-        recognizeText(in: croppedImage) { recognizedText in
-            let cardInfo = self.extractCardInfo(from: recognizedText)
-            completion(cardInfo)
-        }
-    }
-    
-    /// Async version of card identification with multiple processing strategies
     /// - Parameter image: The card image
     /// - Returns: Dictionary with potential card info
     func identifyCard(from image: UIImage) async -> [String: String] {
@@ -532,6 +588,12 @@ class CardScannerService {
             }
         }
         
+        let topSectionResults = await withCheckedContinuation { continuation in
+            recognizeText(in: croppedImage, strategy: .topSection) { strings in
+                continuation.resume(returning: strings)
+            }
+        }
+        
         if croppedImage.size != image.size {
             // If we successfully cropped the card, also try brightened strategy
             let brightenedResults = await withCheckedContinuation { continuation in
@@ -540,8 +602,15 @@ class CardScannerService {
                 }
             }
             
-            // Combine all results
-            var combinedResults = normalResults
+            // Combine all results with priority to top section results
+            var combinedResults = topSectionResults
+            
+            for string in normalResults {
+                if !combinedResults.contains(string) {
+                    combinedResults.append(string)
+                }
+            }
+            
             for string in enhancedResults {
                 if !combinedResults.contains(string) {
                     combinedResults.append(string)
@@ -556,8 +625,15 @@ class CardScannerService {
             
             return extractCardInfo(from: combinedResults)
         } else {
-            // If cropping failed, just use normal and enhanced
-            var combinedResults = normalResults
+            // If cropping failed, prioritize top section results
+            var combinedResults = topSectionResults
+            
+            for string in normalResults {
+                if !combinedResults.contains(string) {
+                    combinedResults.append(string)
+                }
+            }
+            
             for string in enhancedResults {
                 if !combinedResults.contains(string) {
                     combinedResults.append(string)

@@ -76,11 +76,16 @@ final class ScannerViewModel {
             // Debug info
             debugInfo = "Extracted info: \(cardInfo)"
             
-            // Step 3: Search for the card using the extracted info
+            // Step 3: Search for the card using the extracted info with combined strategies
             var foundCard = false
             
-            // Try searching by name first (most accurate)
-            if let cardName = cardInfo["name"] {
+            // Try combined search if we have both name and number
+            if let cardName = cardInfo["name"], let cardNumber = cardInfo["number"] {
+                foundCard = await searchByNameAndNumber(name: cardName, number: cardNumber, set: cardInfo["set"])
+            }
+            
+            // If combined search failed, try by name (most accurate)
+            if !foundCard, let cardName = cardInfo["name"] {
                 foundCard = await searchByName(cardName)
             }
             
@@ -128,13 +133,78 @@ final class ScannerViewModel {
         isProcessing = false
     }
     
+    /// Combined search by name and number for highest accuracy
+    /// - Parameters:
+    ///   - name: The card name
+    ///   - number: The card number
+    ///   - set: Optional set identifier
+    /// - Returns: Boolean indicating if search was successful
+    private func searchByNameAndNumber(name: String, number: String, set: String?) async -> Bool {
+        do {
+            // Build a combined query with both name and number
+            var queryString = "name:*\(name)* number:\(number)"
+            
+            // Add set if available
+            if let set = set {
+                queryString += " set.id:\(set)"
+            }
+            
+            let query = ["q": queryString, "page": "1", "pageSize": "10"]
+            let response = try await pokemonTCGService.searchCards(query: query)
+            
+            if !response.data.isEmpty {
+                // Calculate relevance scores for each card
+                var scoredMatches = response.data.map { card -> (card: Card, score: Int) in
+                    var score = 0
+                    
+                    // Exact name match is highest priority
+                    if card.name.lowercased() == name.lowercased() {
+                        score += 10
+                    }
+                    // Partial name match
+                    else if card.name.lowercased().contains(name.lowercased()) {
+                        score += 5
+                    }
+                    
+                    // Exact number match
+                    if card.number == number {
+                        score += 8
+                    }
+                    
+                    // Set match if we have one
+                    if let set = set, card.set?.id.lowercased() == set.lowercased() {
+                        score += 6
+                    }
+                    
+                    return (card, score)
+                }
+                
+                // Sort by score
+                scoredMatches.sort { $0.score > $1.score }
+                
+                // Use the highest scored match
+                potentialMatches = scoredMatches.map { $0.card }
+                scanResult = potentialMatches.first
+                return true
+            }
+            
+            return false
+        } catch {
+            errorMessage = "Error searching for card: \(error.localizedDescription)"
+            return false
+        }
+    }
+    
     /// Search for cards by name
     /// - Parameter name: The card name to search for
     /// - Returns: Boolean indicating if search was successful
     private func searchByName(_ name: String) async -> Bool {
         do {
+            // Clean the name - remove any non-alphanumeric characters except spaces
+            let cleanName = name.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ")).inverted).joined()
+            
             // Try to search by exact name first
-            let exactQuery = ["q": "name:\"\(name)\"", "page": "1", "pageSize": "10"]
+            let exactQuery = ["q": "name:\"\(cleanName)\"", "page": "1", "pageSize": "10"]
             let exactResponse = try await pokemonTCGService.searchCards(query: exactQuery)
             
             if let firstCard = exactResponse.data.first {
@@ -144,26 +214,87 @@ final class ScannerViewModel {
             }
             
             // If no exact match, try a fuzzy search
-            let fuzzyQuery = ["q": "name:*\(name)*", "page": "1", "pageSize": "20"]
+            let fuzzyQuery = ["q": "name:*\(cleanName)*", "page": "1", "pageSize": "20"]
             let fuzzyResponse = try await pokemonTCGService.searchCards(query: fuzzyQuery)
             
             if !fuzzyResponse.data.isEmpty {
-                // Store all potential matches
-                potentialMatches = fuzzyResponse.data
+                // Calculate relevance scores for each card
+                var scoredMatches = fuzzyResponse.data.map { card -> (card: Card, score: Int) in
+                    var score = 0
+                    
+                    // Exact name match is highest priority
+                    if card.name.lowercased() == cleanName.lowercased() {
+                        score += 10
+                    }
+                    // Name starts with our search term
+                    else if card.name.lowercased().starts(with: cleanName.lowercased()) {
+                        score += 7
+                    }
+                    // Name contains our search term
+                    else if card.name.lowercased().contains(cleanName.lowercased()) {
+                        score += 5
+                    }
+                    
+                    // Prefer newer cards (they tend to be more relevant)
+                    if let set = card.set {
+                        // More recent cards get higher scores
+                        let dateFormatter = DateFormatter()
+                        dateFormatter.dateFormat = "yyyy/MM/dd"
+                        if let date = dateFormatter.date(from: set.releaseDate) {
+                            let now = Date()
+                            let timeInterval = now.timeIntervalSince(date)
+                            // Cards from the last 2 years get a bonus
+                            if timeInterval < 60*60*24*365*2 { // 2 years in seconds
+                                score += 3
+                            }
+                        }
+                    }
+                    
+                    return (card, score)
+                }
                 
-                // Use the first match as the result
-                scanResult = fuzzyResponse.data.first
+                // Sort by score
+                scoredMatches.sort { $0.score > $1.score }
+                
+                // Use the highest scored match
+                potentialMatches = scoredMatches.map { $0.card }
+                scanResult = potentialMatches.first
                 return true
             } else {
                 // Try an even more lenient search by splitting the name and searching for parts
-                let nameParts = name.split(separator: " ")
+                let nameParts = cleanName.split(separator: " ")
                 if nameParts.count > 1, let firstPart = nameParts.first {
                     let partQuery = ["q": "name:*\(firstPart)*", "page": "1", "pageSize": "20"]
                     let partResponse = try await pokemonTCGService.searchCards(query: partQuery)
                     
                     if !partResponse.data.isEmpty {
-                        potentialMatches = partResponse.data
-                        scanResult = partResponse.data.first
+                        // Calculate relevance scores for each card
+                        var scoredMatches = partResponse.data.map { card -> (card: Card, score: Int) in
+                            var score = 0
+                            
+                            // Check how many name parts match
+                            let cardNameLower = card.name.lowercased()
+                            var matchedParts = 0
+                            
+                            for part in nameParts {
+                                if cardNameLower.contains(part.lowercased()) {
+                                    matchedParts += 1
+                                }
+                            }
+                            
+                            // Score based on percentage of parts matched
+                            let matchPercentage = Double(matchedParts) / Double(nameParts.count)
+                            score += Int(matchPercentage * 10)
+                            
+                            return (card, score)
+                        }
+                        
+                        // Sort by score
+                        scoredMatches.sort { $0.score > $1.score }
+                        
+                        // Use the highest scored match
+                        potentialMatches = scoredMatches.map { $0.card }
+                        scanResult = potentialMatches.first
                         return true
                     }
                 }
@@ -307,97 +438,93 @@ final class ScannerViewModel {
         }
     }
     
-    /// Try to scan again with different processing parameters
+    /// Try scanning again with a different approach
     func tryScanAgain() async {
         guard let image = lastScannedImage else {
-            errorMessage = "No image available for rescanning."
+            errorMessage = "No image to rescan"
             return
         }
         
-        // Reset state
         isProcessing = true
         errorMessage = nil
-        potentialMatches = []
         
-        // Try different approach based on current scan stage
+        // Advance to the next scan stage
         switch scanStage {
         case .initial:
-            // Move to enhanced text recognition
             scanStage = .enhancedText
-            debugInfo = "Trying enhanced text recognition..."
-            
-            // Use enhanced text recognition
-            let croppedImage = cardScannerService.detectAndCropCard(image)
-            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
-            let cardInfo = cardScannerService.extractCardInfo(from: recognizedText)
-            
-            debugInfo = "Enhanced scan info: \(cardInfo)"
-            
-            // Try searching with this enhanced info
-            if let name = cardInfo["name"] {
-                _ = await searchByName(name)
-            } else if let number = cardInfo["number"] {
-                _ = await searchByNumber(number, set: cardInfo["set"])
-            }
-            
         case .enhancedText:
-            // Move to name search with partial matching
             scanStage = .nameSearch
-            debugInfo = "Trying partial name search..."
-            
-            // Try to extract any text that might be part of a name
-            let croppedImage = cardScannerService.detectAndCropCard(image)
-            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
-            
-            // Look for potential name fragments
-            let potentialNameFragments = recognizedText.filter { text in
-                let cleaned = text.trimmingCharacters(in: .whitespacesAndNewlines)
-                return cleaned.count >= 3 && cleaned.first?.isUppercase == true
-            }
-            
-            // Try searching for each potential name fragment
-            var found = false
-            for fragment in potentialNameFragments {
-                if await searchByName(fragment) {
-                    found = true
-                    break
-                }
-            }
-            
-            if !found {
-                errorMessage = "Still unable to identify the card. Try taking a new photo with better lighting."
-            }
-            
         case .nameSearch:
-            // Move to number search
             scanStage = .numberSearch
-            debugInfo = "Trying number pattern search..."
-            
-            // Look specifically for number patterns
-            let croppedImage = cardScannerService.detectAndCropCard(image)
-            let recognizedText = await cardScannerService.recognizeText(in: croppedImage)
-            
-            // Extract anything that looks like a card number
-            var found = false
-            for text in recognizedText {
-                if let range = text.range(of: #"\d+/\d+"#, options: .regularExpression) {
-                    let number = String(text[range])
-                    if await searchByNumber(number, set: nil) {
-                        found = true
-                        break
+        case .numberSearch:
+            scanStage = .visualSearch
+        case .visualSearch:
+            scanStage = .failed
+        case .failed:
+            scanStage = .initial
+        }
+        
+        do {
+            // Different processing based on scan stage
+            switch scanStage {
+            case .enhancedText:
+                // Try with enhanced contrast and sharpening
+                let croppedImage = cardScannerService.preprocessImage(image, strategy: .enhanced)
+                let cardInfo = await cardScannerService.identifyCard(from: croppedImage)
+                debugInfo = "Enhanced scan: \(cardInfo)"
+                
+                if let name = cardInfo["name"] {
+                    if await searchByName(name) {
+                        isProcessing = false
+                        return
                     }
                 }
+                
+                if let number = cardInfo["number"] {
+                    if await searchByNumber(number, set: cardInfo["set"]) {
+                        isProcessing = false
+                        return
+                    }
+                }
+                
+            case .nameSearch:
+                // Try focusing on just the card name at the top
+                let croppedImage = cardScannerService.preprocessImage(image, strategy: .topSection)
+                let cardInfo = await cardScannerService.identifyCard(from: croppedImage)
+                debugInfo = "Name search: \(cardInfo)"
+                
+                if let name = cardInfo["name"] {
+                    if await searchByName(name) {
+                        isProcessing = false
+                        return
+                    }
+                }
+                
+            case .numberSearch:
+                // Try focusing on the bottom of the card for the number
+                let croppedImage = cardScannerService.detectAndCropCard(image)
+                let cardInfo = await cardScannerService.identifyCard(from: croppedImage)
+                debugInfo = "Number search: \(cardInfo)"
+                
+                if let number = cardInfo["number"] {
+                    if await searchByNumber(number, set: nil) {
+                        isProcessing = false
+                        return
+                    }
+                }
+                
+            case .visualSearch, .initial, .failed:
+                // Just try the normal process again
+                await processImage(image)
+                isProcessing = false
+                return
             }
             
-            if !found {
-                errorMessage = "Unable to identify the card after multiple attempts. Try taking a new photo with better lighting and positioning."
-            }
+            // If we got here, we failed to identify the card
+            errorMessage = "Could not identify card. Try taking a clearer photo or selecting from the list."
             
-        default:
-            // Reset scan attempts if we've tried multiple approaches
-            scanAttempts = 0
-            scanStage = .initial
-            errorMessage = "Unable to identify the card after multiple attempts. Try taking a new photo with better lighting and positioning."
+        } catch {
+            errorMessage = "Error: \(error.localizedDescription)"
         }
         
         isProcessing = false
