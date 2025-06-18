@@ -46,7 +46,7 @@ class BrowseViewModel: ObservableObject {
             
             // Sort sets by release date (newest first)
             let sortedSets = response.data.sorted { 
-                $0.releaseDate > $1.releaseDate 
+                ($0.releaseDate ?? "") > ($1.releaseDate ?? "") 
             }
             
             DispatchQueue.main.async {

@@ -142,7 +142,7 @@ class CardScannerService {
     ///   - image: Original image
     ///   - strategy: Processing strategy to apply
     /// - Returns: Processed image
-    func preprocessImage(_ image: UIImage, strategy: ProcessingStrategy = .normal) -> UIImage {
+    public func preprocessImage(_ image: UIImage, strategy: ProcessingStrategy = .normal) -> UIImage {
         // Create a CIImage from the UIImage
         guard let ciImage = CIImage(image: image) else {
             return image
@@ -477,7 +477,9 @@ class CardScannerService {
             #"[HM]P\s*(\d+)"#,          // Common OCR error: "MP 120" (H read as M)
             #"(\d+)\s*[HM]P"#,          // Common OCR error reversed: "120 MP"
             #"(\d+)\s*[Hh][Pp]"#,       // Mixed case: "120 Hp"
-            #"[Hh][Pp]\s*(\d+)"#        // Mixed case: "Hp 120"
+            #"[Hh][Pp]\s*(\d+)"#,       // Mixed case: "Hp 120"
+            #"H[Pp]\s*(\d+)"#,          // Mixed case: "Hp 120"
+            #"(\d+)\s*H[Pp]"#           // Mixed case: "120 Hp"
         ]
         
         // Try all patterns
@@ -520,6 +522,14 @@ class CardScannerService {
                             score -= 1
                         }
                         
+                        // Bonus for HP values found in the same text as Pokemon names or terms
+                        for pokemonName in commonPokemonNames {
+                            if text.contains(pokemonName) {
+                                score += 3 // Higher confidence if found with a Pokemon name
+                                break
+                            }
+                        }
+                        
                         potentialHPs.append((hpValue, score))
                     }
                 }
@@ -555,11 +565,39 @@ class CardScannerService {
     private func evaluatePotentialCardName(_ text: String, potentialNames: inout [(name: String, score: Int)]) {
         // Skip texts that are likely not Pokemon names
         if text.contains("/") || 
-           text.lowercased().contains("hp") ||
            text.lowercased() == "pokemon" ||
            text.lowercased() == "trainer" ||
            text.lowercased() == "energy" {
             return
+        }
+        
+        // Special handling for text containing HP - extract the name part
+        if text.lowercased().contains("hp") {
+            // Try to extract a potential name before the HP
+            let parts = text.components(separatedBy: CharacterSet(charactersIn: "HP hHpP0123456789"))
+            let potentialNamePart = parts.first?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            
+            if potentialNamePart.count >= 4 {
+                // This might be a name followed by HP
+                var score = 2 // Base score for name+HP pattern
+                
+                // Check if it matches known Pokemon names
+                for pokemonName in commonPokemonNames {
+                    if potentialNamePart.contains(pokemonName) {
+                        score += 5 // Very high confidence if it contains a known Pokemon name
+                        potentialNames.append((potentialNamePart, score))
+                        return
+                    }
+                }
+                
+                // If it starts with uppercase, it's more likely a name
+                if potentialNamePart.first?.isUppercase == true {
+                    score += 1
+                    potentialNames.append((potentialNamePart, score))
+                }
+                
+                return
+            }
         }
         
         // Check if text contains any Pokemon type or term
@@ -669,6 +707,68 @@ class CardScannerService {
         }
     }
     
+    /// Extract both name and HP from the same text string for higher accuracy
+    /// - Parameters:
+    ///   - recognizedText: Array of recognized text strings
+    ///   - potentialNameHP: Array to store potential name+HP pairs with confidence scores
+    private func extractNameAndHP(from recognizedText: [String], potentialNameHP: inout [(name: String, hp: String, score: Int)]) {
+        // Common patterns for name+HP combinations
+        let patterns = [
+            #"([A-Z][a-zA-Z\s]+)\s+HP\s*(\d+)"#,           // "Pikachu HP 120"
+            #"([A-Z][a-zA-Z\s]+)\s+(\d+)\s*HP"#,           // "Pikachu 120 HP"
+            #"([A-Z][a-zA-Z\s]+)\s+[HM]P\s*(\d+)"#,        // Common OCR error
+            #"([A-Z][a-zA-Z\s]+)\s+(\d+)\s*[HM]P"#         // Common OCR error reversed
+        ]
+        
+        for text in recognizedText {
+            // Skip very short texts
+            if text.count < 8 { // Name + HP needs some length
+                continue
+            }
+            
+            // Try all patterns
+            for (index, pattern) in patterns.enumerated() {
+                if let regex = try? NSRegularExpression(pattern: pattern) {
+                    let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                    if let match = regex.firstMatch(in: text, range: range) {
+                        // Need at least 2 capture groups (name and HP)
+                        guard match.numberOfRanges >= 3,
+                              let nameRange = Range(match.range(at: 1), in: text),
+                              let hpRange = Range(match.range(at: 2), in: text) else {
+                            continue
+                        }
+                        
+                        let name = String(text[nameRange]).trimmingCharacters(in: .whitespacesAndNewlines)
+                        let hp = String(text[hpRange])
+                        
+                        // Skip if name is too short or HP is invalid
+                        if name.count < 3 || Int(hp) == nil {
+                            continue
+                        }
+                        
+                        // Base score - finding both name and HP together is high confidence
+                        var score = 5
+                        
+                        // Check if name matches known Pokemon
+                        for pokemonName in commonPokemonNames {
+                            if name.contains(pokemonName) {
+                                score += 5 // Very high confidence if it contains a known Pokemon name
+                                break
+                            }
+                        }
+                        
+                        // Check if HP is a common value
+                        if let intHP = Int(hp), intHP >= 30 && intHP <= 340 && intHP.isMultiple(of: 10) {
+                            score += 2
+                        }
+                        
+                        potentialNameHP.append((name, hp, score))
+                    }
+                }
+            }
+        }
+    }
+    
     /// Identifies a card from an image using multiple strategies
     /// - Parameter image: The card image
     /// - Returns: Dictionary with potential card info
@@ -702,34 +802,37 @@ class CardScannerService {
             }
         }
         
+        // Combine all results with priority to top section and HP section results
+        var combinedResults: [String] = []
+        
+        // First add top section results (likely to contain name)
+        combinedResults.append(contentsOf: topSectionResults)
+        
+        // Then add HP section results
+        for string in hpSectionResults {
+            if !combinedResults.contains(string) {
+                combinedResults.append(string)
+            }
+        }
+        
+        // Then add normal and enhanced results
+        for string in normalResults {
+            if !combinedResults.contains(string) {
+                combinedResults.append(string)
+            }
+        }
+        
+        for string in enhancedResults {
+            if !combinedResults.contains(string) {
+                combinedResults.append(string)
+            }
+        }
+        
+        // If we successfully cropped the card, also try brightened strategy
         if croppedImage.size != image.size {
-            // If we successfully cropped the card, also try brightened strategy
             let brightenedResults = await withCheckedContinuation { continuation in
                 recognizeText(in: croppedImage, strategy: .brightened) { strings in
                     continuation.resume(returning: strings)
-                }
-            }
-            
-            // Combine all results with priority to top section and HP section results
-            var combinedResults = topSectionResults
-            
-            // Add HP section results with high priority
-            for string in hpSectionResults {
-                if !combinedResults.contains(string) {
-                    // Insert at beginning for higher priority
-                    combinedResults.insert(string, at: 0)
-                }
-            }
-            
-            for string in normalResults {
-                if !combinedResults.contains(string) {
-                    combinedResults.append(string)
-                }
-            }
-            
-            for string in enhancedResults {
-                if !combinedResults.contains(string) {
-                    combinedResults.append(string)
                 }
             }
             
@@ -738,33 +841,22 @@ class CardScannerService {
                     combinedResults.append(string)
                 }
             }
-            
-            return extractCardInfo(from: combinedResults)
-        } else {
-            // If cropping failed, prioritize top section and HP section results
-            var combinedResults = topSectionResults
-            
-            // Add HP section results with high priority
-            for string in hpSectionResults {
-                if !combinedResults.contains(string) {
-                    // Insert at beginning for higher priority
-                    combinedResults.insert(string, at: 0)
-                }
-            }
-            
-            for string in normalResults {
-                if !combinedResults.contains(string) {
-                    combinedResults.append(string)
-                }
-            }
-            
-            for string in enhancedResults {
-                if !combinedResults.contains(string) {
-                    combinedResults.append(string)
-                }
-            }
-            
-            return extractCardInfo(from: combinedResults)
         }
+        
+        // Extract card info with emphasis on name+HP combinations
+        var cardInfo = extractCardInfo(from: combinedResults)
+        
+        // Look specifically for name+HP combinations for higher accuracy
+        var potentialNameHP: [(name: String, hp: String, score: Int)] = []
+        extractNameAndHP(from: combinedResults, potentialNameHP: &potentialNameHP)
+        
+        // If we found name+HP combinations, prioritize them over individual extractions
+        if let bestNameHP = potentialNameHP.max(by: { $0.score < $1.score }) {
+            cardInfo["name"] = bestNameHP.name
+            cardInfo["hp"] = bestNameHP.hp
+            cardInfo["nameHPConfidence"] = String(bestNameHP.score) // Store confidence for debugging
+        }
+        
+        return cardInfo
     }
-} 
+}

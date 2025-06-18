@@ -81,27 +81,45 @@ final class ScannerViewModel {
             var foundCard = false
             
             // Try combined search with name and HP (highest accuracy)
+            // Check if we have a nameHPConfidence value which indicates a direct name+HP extraction
             if let cardName = cardInfo["name"], let cardHP = cardInfo["hp"] {
-                foundCard = await searchByNameAndHP(name: cardName, hp: cardHP)
+                // If we have a nameHPConfidence value, this is our highest priority search
+                if let _ = cardInfo["nameHPConfidence"] {
+                    scanStage = .nameSearch
+                    foundCard = await searchByNameAndHP(name: cardName, hp: cardHP)
+                    
+                    // If this high-confidence search fails, something is wrong with the data
+                    if !foundCard {
+                        // Try with just the name as fallback
+                        foundCard = await searchByName(cardName)
+                    }
+                } else {
+                    // Standard name+HP search
+                    foundCard = await searchByNameAndHP(name: cardName, hp: cardHP)
+                }
             }
             
             // If name+HP search failed, try combined search with name and number
             if !foundCard, let cardName = cardInfo["name"], let cardNumber = cardInfo["number"] {
+                scanStage = .numberSearch
                 foundCard = await searchByNameAndNumber(name: cardName, number: cardNumber, set: cardInfo["set"])
             }
             
             // If combined searches failed, try by name (still quite accurate)
             if !foundCard, let cardName = cardInfo["name"] {
+                scanStage = .nameSearch
                 foundCard = await searchByName(cardName)
             }
             
             // If name search failed, try by number and set
             if !foundCard, let cardNumber = cardInfo["number"] {
+                scanStage = .numberSearch
                 foundCard = await searchByNumber(cardNumber, set: cardInfo["set"])
             }
             
             // If other searches failed, try by HP (less specific)
             if !foundCard, let hp = cardInfo["hp"] {
+                scanStage = .hpSearch
                 foundCard = await searchByHP(hp)
             }
             
@@ -246,7 +264,7 @@ final class ScannerViewModel {
                         // More recent cards get higher scores
                         let dateFormatter = DateFormatter()
                         dateFormatter.dateFormat = "yyyy/MM/dd"
-                        if let date = dateFormatter.date(from: set.releaseDate) {
+                        if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
                             let now = Date()
                             let timeInterval = now.timeIntervalSince(date)
                             // Cards from the last 2 years get a bonus
@@ -395,7 +413,7 @@ final class ScannerViewModel {
                         // More recent cards get higher scores
                         let dateFormatter = DateFormatter()
                         dateFormatter.dateFormat = "yyyy/MM/dd"
-                        if let date = dateFormatter.date(from: set.releaseDate) {
+                        if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
                             let now = Date()
                             let timeInterval = now.timeIntervalSince(date)
                             // Cards from the last 2 years get a bonus
@@ -462,16 +480,33 @@ final class ScannerViewModel {
                 var scoredMatches = response.data.map { card -> (card: Card, score: Int) in
                     var score = 0
                     
-                    // Name matching
+                    // Name matching - more precise matching for better results
                     if card.name.lowercased() == cleanName.lowercased() {
                         score += 10 // Exact name match
                     } else if card.name.lowercased().starts(with: cleanName.lowercased()) {
                         score += 7 // Name starts with our search term
                     } else if card.name.lowercased().contains(cleanName.lowercased()) {
                         score += 5 // Name contains our search term
+                    } else {
+                        // Check if name parts match
+                        let searchParts = cleanName.lowercased().split(separator: " ")
+                        let cardNameParts = card.name.lowercased().split(separator: " ")
+                        
+                        var matchedParts = 0
+                        for part in searchParts {
+                            if cardNameParts.contains(where: { $0.contains(part) }) {
+                                matchedParts += 1
+                            }
+                        }
+                        
+                        if matchedParts > 0 {
+                            // Score based on percentage of parts matched
+                            let matchPercentage = Double(matchedParts) / Double(searchParts.count)
+                            score += Int(matchPercentage * 5)
+                        }
                     }
                     
-                    // HP matching
+                    // HP matching - exact match is critical
                     if card.hp == hp {
                         score += 10 // Exact HP match
                     } else {
@@ -492,11 +527,22 @@ final class ScannerViewModel {
                     if let set = card.set {
                         let dateFormatter = DateFormatter()
                         dateFormatter.dateFormat = "yyyy/MM/dd"
-                        if let date = dateFormatter.date(from: set.releaseDate) {
+                        if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
                             let now = Date()
                             let timeInterval = now.timeIntervalSince(date)
                             if timeInterval < 60*60*24*365*2 { // 2 years in seconds
                                 score += 3
+                            }
+                        }
+                    }
+                    
+                    // Prefer certain card types that are more popular
+                    if let types = card.types {
+                        let popularTypes = ["Fire", "Water", "Electric", "Psychic", "Dragon"]
+                        for type in types {
+                            if popularTypes.contains(type) {
+                                score += 1
+                                break
                             }
                         }
                     }
@@ -510,7 +556,84 @@ final class ScannerViewModel {
                 // Use the highest scored match
                 potentialMatches = scoredMatches.map { $0.card }
                 scanResult = potentialMatches.first
-                return true
+                
+                // If we have a high-confidence match, return true
+                if let topScore = scoredMatches.first?.score, topScore >= 15 {
+                    return true
+                } else if !potentialMatches.isEmpty {
+                    // We have matches but not high confidence
+                    return true
+                }
+            }
+            
+            // Try a more flexible search if the first one failed
+            // This helps with OCR errors in the name
+            let nameParts = cleanName.split(separator: " ")
+            if nameParts.count > 1, let firstPart = nameParts.first {
+                let flexibleQuery = ["q": "name:*\(firstPart)* hp:\(hp)", "page": "1", "pageSize": "20"]
+                let flexibleResponse = try await pokemonTCGService.searchCards(query: flexibleQuery)
+                
+                if !flexibleResponse.data.isEmpty {
+                    // Calculate relevance scores for each card
+                    var scoredMatches = flexibleResponse.data.map { card -> (card: Card, score: Int) in
+                        var score = 0
+                        
+                        // Name matching
+                        let searchParts = cleanName.lowercased().split(separator: " ")
+                        let cardNameParts = card.name.lowercased().split(separator: " ")
+                        
+                        var matchedParts = 0
+                        for part in searchParts {
+                            if cardNameParts.contains(where: { $0.contains(part) }) {
+                                matchedParts += 1
+                            }
+                        }
+                        
+                        // Score based on percentage of parts matched
+                        let matchPercentage = Double(matchedParts) / Double(searchParts.count)
+                        score += Int(matchPercentage * 7)
+                        
+                        // HP matching - exact match is critical
+                        if card.hp == hp {
+                            score += 10 // Exact HP match
+                        } else {
+                            // If not exact match, calculate how close the HP values are
+                            if let cardHP = Int(card.hp ?? "0"), let searchHP = Int(hp) {
+                                let difference = abs(cardHP - searchHP)
+                                if difference <= 10 {
+                                    score += 8 // Very close match
+                                } else if difference <= 30 {
+                                    score += 5 // Somewhat close match
+                                } else if difference <= 50 {
+                                    score += 2 // Distant match
+                                }
+                            }
+                        }
+                        
+                        // Prefer newer cards
+                        if let set = card.set {
+                            let dateFormatter = DateFormatter()
+                            dateFormatter.dateFormat = "yyyy/MM/dd"
+                            if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
+                                let now = Date()
+                                let timeInterval = now.timeIntervalSince(date)
+                                if timeInterval < 60*60*24*365*2 { // 2 years in seconds
+                                    score += 3
+                                }
+                            }
+                        }
+                        
+                        return (card, score)
+                    }
+                    
+                    // Sort by score
+                    scoredMatches.sort { $0.score > $1.score }
+                    
+                    // Use the highest scored match
+                    potentialMatches = scoredMatches.map { $0.card }
+                    scanResult = potentialMatches.first
+                    return true
+                }
             }
             
             return false
@@ -634,7 +757,7 @@ final class ScannerViewModel {
                         return
                     }
                 }
-                
+            
             case .nameSearch:
                 // Try focusing on just the card name at the top
                 let croppedImage = cardScannerService.preprocessImage(image, strategy: .topSection)
@@ -647,7 +770,7 @@ final class ScannerViewModel {
                         return
                     }
                 }
-                
+            
             case .numberSearch:
                 // Try focusing on the bottom of the card for the number
                 let croppedImage = cardScannerService.detectAndCropCard(image)
@@ -660,7 +783,7 @@ final class ScannerViewModel {
                         return
                     }
                 }
-                
+            
             case .hpSearch:
                 // Try focusing on the HP value
                 let croppedImage = cardScannerService.preprocessImage(image, strategy: .hpSection)
@@ -673,15 +796,7 @@ final class ScannerViewModel {
                         return
                     }
                 }
-                
-                // If HP search alone fails, try combined name+HP search if both are available
-                if let name = cardInfo["name"], let hp = cardInfo["hp"] {
-                    if await searchByNameAndHP(name: name, hp: hp) {
-                        isProcessing = false
-                        return
-                    }
-                }
-                
+            
             case .visualSearch, .initial, .failed:
                 // Just try the normal process again
                 await processImage(image)

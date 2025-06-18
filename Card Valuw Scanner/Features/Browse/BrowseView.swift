@@ -186,7 +186,7 @@ struct BrowseView: View {
                                 .font(.subheadline)
                                 .foregroundColor(.secondary)
                             
-                            Text("Released: \(formatDate(selectedSet.releaseDate))")
+                            Text("Released: \(formatDate(selectedSet.releaseDate ?? ""))")
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }

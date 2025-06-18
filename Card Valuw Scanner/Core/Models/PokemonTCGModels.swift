@@ -91,7 +91,7 @@ struct Set: Codable, Identifiable, Hashable {
     let printedTotal: Int
     let total: Int
     let legalities: Legalities?
-    let releaseDate: String
+    let releaseDate: String?
     let images: SetImages
     
     // Hashable implementation
