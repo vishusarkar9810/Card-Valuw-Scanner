@@ -40,10 +40,35 @@ struct PriceHistoryChart: View {
         return sum / Double(priceHistory.count)
     }
     
+    // Display only a subset of dates for better readability
+    private var dateLabels: [Int] {
+        // For weekly data (26 points), show approximately monthly labels
+        let count = priceHistory.count
+        if count > 20 {
+            // Show approximately 6 labels (roughly monthly for 6 months of data)
+            let step = max(1, count / 6)
+            return stride(from: 0, to: count, by: step).map { $0 }
+        } else {
+            // For fewer points, show every other point
+            let step = max(1, count / 4)
+            return stride(from: 0, to: count, by: step).map { $0 }
+        }
+    }
+    
     private func formatDate(_ date: Date) -> String {
         let formatter = DateFormatter()
-        formatter.dateFormat = "MMM"
-        return formatter.string(from: date)
+        
+        // Use abbreviated month name and day
+        formatter.dateFormat = "MMM d"
+        
+        // For better readability in charts
+        let dateStr = formatter.string(from: date)
+        
+        // Make first letter uppercase and rest lowercase
+        if let firstChar = dateStr.first {
+            return String(firstChar).uppercased() + dateStr.dropFirst().lowercased()
+        }
+        return dateStr
     }
     
     @ViewBuilder
@@ -67,8 +92,8 @@ struct PriceHistoryChart: View {
             // Price line
             Path { path in
                 for (index, point) in priceHistory.enumerated() {
-                    let x = width * (CGFloat(index) / CGFloat(priceHistory.count - 1))
-                    let y = height - (height * CGFloat((point.price - minY) / yRange))
+                    let x = width * (CGFloat(index) / CGFloat(max(1, priceHistory.count - 1)))
+                    let y = height - (height * CGFloat((point.price - minY) / max(0.01, yRange)))
                     
                     if index == 0 {
                         path.move(to: CGPoint(x: x, y: y))
@@ -82,8 +107,8 @@ struct PriceHistoryChart: View {
             // Data points
             ForEach(priceHistory.indices, id: \.self) { index in
                 let point = priceHistory[index]
-                let x = width * (CGFloat(index) / CGFloat(priceHistory.count - 1))
-                let y = height - (height * CGFloat((point.price - minY) / yRange))
+                let x = width * (CGFloat(index) / CGFloat(max(1, priceHistory.count - 1)))
+                let y = height - (height * CGFloat((point.price - minY) / max(0.01, yRange)))
                 
                 Circle()
                     .fill(Color.blue)
@@ -91,15 +116,21 @@ struct PriceHistoryChart: View {
                     .position(x: x, y: y)
             }
             
-            // X-axis labels
-            HStack(spacing: 0) {
-                ForEach(priceHistory.indices, id: \.self) { index in
+            // X-axis labels - only show a subset for better readability
+            ZStack(alignment: .bottom) {
+                // Draw the actual X-axis labels
+                ForEach(dateLabels, id: \.self) { index in
                     Text(formatDate(priceHistory[index].date))
                         .font(.caption2)
-                        .frame(width: width / CGFloat(priceHistory.count))
+                        .foregroundColor(.secondary)
+                        .position(
+                            x: width * (CGFloat(index) / CGFloat(max(1, priceHistory.count - 1))),
+                            y: height + 15
+                        )
                 }
             }
-            .offset(y: height + 15)
+            .frame(width: width, height: 30)
+            .offset(y: 15)
         }
         .frame(height: 200)
         .padding(.top, 20)

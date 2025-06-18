@@ -10,16 +10,14 @@ import SwiftUI
     var isLoading = false
     var errorMessage: String?
     
-    // Mock price history data - in a real app, this would come from an API or local storage
+    // Price history data
     var priceHistory: [(date: Date, price: Double)] = []
+    var isPriceHistoryLoading = false
     
     init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
         self.card = card
         self.pokemonTCGService = pokemonTCGService
         self.persistenceManager = persistenceManager
-        
-        // Generate mock price history data
-        generateMockPriceHistory()
     }
     
     // MARK: - Related Cards
@@ -51,8 +49,26 @@ import SwiftUI
     
     // MARK: - Price History
     
-    private func generateMockPriceHistory() {
-        // Create mock price history for the last 6 months
+    @MainActor
+    func fetchPriceHistory() async {
+        isPriceHistoryLoading = true
+        
+        do {
+            // Fetch price history from the service
+            priceHistory = try await pokemonTCGService.getPriceHistory(for: card.id)
+            isPriceHistoryLoading = false
+        } catch {
+            errorMessage = "Failed to load price history: \(error.localizedDescription)"
+            isPriceHistoryLoading = false
+            
+            // Fall back to generating mock data if the API call fails
+            generateBackupPriceHistory()
+        }
+    }
+    
+    // Fallback method to generate price history if the API call fails
+    private func generateBackupPriceHistory() {
+        // Create backup price history for the last 6 months
         let calendar = Calendar.current
         let today = Date()
         

@@ -109,6 +109,23 @@ struct CardDetailView: View {
                 // Price history chart
                 if !viewModel.priceHistory.isEmpty {
                     PriceHistoryChart(priceHistory: viewModel.priceHistory)
+                        .redacted(reason: viewModel.isPriceHistoryLoading ? .placeholder : [])
+                        .overlay {
+                            if viewModel.isPriceHistoryLoading {
+                                ProgressView()
+                            }
+                        }
+                } else if viewModel.isPriceHistoryLoading {
+                    VStack {
+                        Text("Loading price history...")
+                            .font(.caption)
+                        ProgressView()
+                    }
+                    .frame(height: 200)
+                } else {
+                    Text("No price history available")
+                        .foregroundColor(.secondary)
+                        .frame(height: 100)
                 }
                 
                 // Market prices
@@ -200,6 +217,7 @@ struct CardDetailView: View {
         }
         .task {
             await viewModel.fetchRelatedCards()
+            await viewModel.fetchPriceHistory()
         }
     }
     
