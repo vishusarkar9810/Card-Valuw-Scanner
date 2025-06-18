@@ -84,7 +84,11 @@ struct CollectionView: View {
                 .presentationDetents([.medium, .large])
             }
             .navigationDestination(item: $selectedCard) { card in
-                CardDetailView(card: card)
+                CardDetailView(
+                    card: card,
+                    pokemonTCGService: model.pokemonTCGService,
+                    persistenceManager: model.persistenceManager
+                )
             }
             .task {
                 // Just load the collection without adding sample cards

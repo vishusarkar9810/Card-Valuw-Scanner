@@ -2,6 +2,18 @@ import SwiftUI
 
 struct CardDetailView: View {
     let card: Card
+    @State private var viewModel: CardDetailViewModel
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
+    
+    init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
+        self.card = card
+        self._viewModel = State(initialValue: CardDetailViewModel(
+            card: card,
+            pokemonTCGService: pokemonTCGService,
+            persistenceManager: persistenceManager
+        ))
+    }
     
     var body: some View {
         ScrollView {
@@ -94,6 +106,11 @@ struct CardDetailView: View {
                 
                 Divider()
                 
+                // Price history chart
+                if !viewModel.priceHistory.isEmpty {
+                    PriceHistoryChart(priceHistory: viewModel.priceHistory)
+                }
+                
                 // Market prices
                 Group {
                     Text("Market Prices")
@@ -140,11 +157,63 @@ struct CardDetailView: View {
                             .foregroundColor(.secondary)
                     }
                 }
+                
+                Divider()
+                
+                // Related cards section
+                RelatedCardsView(cards: viewModel.relatedCards) { selectedCard in
+                    // This will be handled by the navigation link
+                }
+                .redacted(reason: viewModel.isLoading ? .placeholder : [])
+                .overlay {
+                    if viewModel.isLoading {
+                        ProgressView()
+                    }
+                }
+                
+                if let errorMessage = viewModel.errorMessage {
+                    Text(errorMessage)
+                        .foregroundColor(.red)
+                        .font(.caption)
+                }
             }
             .padding()
         }
         .navigationTitle("Card Details")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    viewModel.toggleCollectionStatus()
+                }) {
+                    Image(systemName: viewModel.isInCollection() ? "heart.fill" : "heart")
+                }
+            }
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    shareCard()
+                }) {
+                    Image(systemName: "square.and.arrow.up")
+                }
+            }
+        }
+        .task {
+            await viewModel.fetchRelatedCards()
+        }
+    }
+    
+    private func shareCard() {
+        let activityVC = viewModel.shareCard()
+        
+        // Find the root view controller
+        guard let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let rootViewController = windowScene.windows.first?.rootViewController else {
+            return
+        }
+        
+        // Present the activity view controller
+        rootViewController.present(activityVC, animated: true)
     }
     
     private func priceSection(title: String, prices: PriceDetails) -> some View {

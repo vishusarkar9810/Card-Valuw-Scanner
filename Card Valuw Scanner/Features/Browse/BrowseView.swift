@@ -4,7 +4,7 @@ import SwiftData
 struct BrowseView: View {
     // MARK: - Properties
     
-    @StateObject private var viewModel: BrowseViewModel
+    let viewModel: BrowseViewModel
     @State private var searchText: String = ""
     @State private var selectedSet: Set? = nil
     @State private var selectedCard: Card? = nil
@@ -12,10 +12,10 @@ struct BrowseView: View {
     // MARK: - Initialization
     
     init(pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
-        self._viewModel = StateObject(wrappedValue: BrowseViewModel(
+        self.viewModel = BrowseViewModel(
             pokemonTCGService: pokemonTCGService,
             persistenceManager: persistenceManager
-        ))
+        )
     }
     
     // MARK: - Body
@@ -43,7 +43,11 @@ struct BrowseView: View {
                 }
             }
             .navigationDestination(item: $selectedCard) { card in
-                CardDetailView(card: card)
+                CardDetailView(
+                    card: card,
+                    pokemonTCGService: viewModel.pokemonTCGService,
+                    persistenceManager: viewModel.persistenceManager
+                )
             }
             .toolbar {
                 if selectedSet != nil {

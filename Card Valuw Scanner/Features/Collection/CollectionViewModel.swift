@@ -6,8 +6,9 @@ import Observation
 final class CollectionViewModel {
     // MARK: - Properties
     
-    private let pokemonTCGService: PokemonTCGService
-    private var persistenceManager: PersistenceManager
+    // Services
+    let pokemonTCGService: PokemonTCGService
+    var persistenceManager: PersistenceManager
     
     // State
     var cards: [Card] = []

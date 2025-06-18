@@ -7,19 +7,21 @@ enum SortOption {
     case rarity
 }
 
-class BrowseViewModel: ObservableObject {
+@Observable
+final class BrowseViewModel {
     // MARK: - Properties
     
-    private let pokemonTCGService: PokemonTCGService
-    private var persistenceManager: PersistenceManager
+    // Services
+    let pokemonTCGService: PokemonTCGService
+    let persistenceManager: PersistenceManager
     
     // State
-    @Published var sets: [Set] = []
-    @Published var filteredSets: [Set] = []
-    @Published var cards: [Card] = []
-    @Published var filteredCards: [Card] = []
-    @Published var isLoading = false
-    @Published var errorMessage: String? = nil
+    var sets: [Set] = []
+    var filteredSets: [Set] = []
+    var cards: [Card] = []
+    var filteredCards: [Card] = []
+    var isLoading = false
+    var errorMessage: String? = nil
     
     // MARK: - Initialization
     
@@ -29,12 +31,6 @@ class BrowseViewModel: ObservableObject {
     }
     
     // MARK: - Methods
-    
-    /// Update the persistence manager
-    /// - Parameter newPersistenceManager: The new persistence manager
-    func updatePersistenceManager(_ newPersistenceManager: PersistenceManager) {
-        self.persistenceManager = newPersistenceManager
-    }
     
     /// Load all Pokemon card sets
     func loadSets() async {
@@ -49,16 +45,12 @@ class BrowseViewModel: ObservableObject {
                 ($0.releaseDate ?? "") > ($1.releaseDate ?? "") 
             }
             
-            DispatchQueue.main.async {
-                self.sets = sortedSets
-                self.filteredSets = sortedSets
-                self.isLoading = false
-            }
+            sets = sortedSets
+            filteredSets = sortedSets
+            isLoading = false
         } catch {
-            DispatchQueue.main.async {
-                self.errorMessage = "Error loading sets: \(error.localizedDescription)"
-                self.isLoading = false
-            }
+            errorMessage = "Error loading sets: \(error.localizedDescription)"
+            isLoading = false
         }
     }
     
@@ -72,16 +64,12 @@ class BrowseViewModel: ObservableObject {
             let query = ["q": "set.id:\(set.id)", "page": "1", "pageSize": "250"]
             let response = try await pokemonTCGService.searchCards(query: query)
             
-            DispatchQueue.main.async {
-                self.cards = response.data
-                self.filteredCards = response.data
-                self.isLoading = false
-            }
+            cards = response.data
+            filteredCards = response.data
+            isLoading = false
         } catch {
-            DispatchQueue.main.async {
-                self.errorMessage = "Error loading cards: \(error.localizedDescription)"
-                self.isLoading = false
-            }
+            errorMessage = "Error loading cards: \(error.localizedDescription)"
+            isLoading = false
         }
     }
     

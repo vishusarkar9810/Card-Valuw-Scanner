@@ -123,6 +123,29 @@ final class PersistenceManager {
         saveChanges()
     }
     
+    // MARK: - Collection Management
+    
+    /// Checks if a card is in the user's collection
+    /// - Parameter cardId: The ID of the card to check
+    /// - Returns: True if the card is in the collection, false otherwise
+    func isCardInCollection(cardId: String) -> Bool {
+        return fetchCard(withID: cardId) != nil
+    }
+    
+    /// Adds a card to the user's collection
+    /// - Parameter card: The card to add to the collection
+    func addCardToCollection(card: Card) {
+        _ = addCard(card)
+    }
+    
+    /// Removes a card from the user's collection by ID
+    /// - Parameter cardId: The ID of the card to remove
+    func removeCardFromCollection(cardId: String) {
+        if let cardEntity = fetchCard(withID: cardId) {
+            removeCard(cardEntity)
+        }
+    }
+    
     // MARK: - Helper Methods
     
     /// Saves any pending changes to the persistent store
