@@ -97,8 +97,21 @@ extension CardEntity {
         // Create TCGPlayer if available
         var tcgPlayer: TcgPlayer? = nil
         if let prices = prices {
-            tcgPlayer = TcgPlayer(url: "", updatedAt: "", prices: prices)
+            tcgPlayer = TcgPlayer(url: "https://www.tcgplayer.com/search/pokemon/all?q=\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)", updatedAt: "", prices: prices)
         }
+        
+        // Create CardMarket prices and object
+        let cardMarketPrices = CardMarketPrices(
+            averageSellPrice: currentPrice,
+            lowPrice: currentPrice != nil ? currentPrice! * 0.9 : nil,
+            trendPrice: currentPrice
+        )
+        
+        let cardmarket = CardMarket(
+            url: "https://www.cardmarket.com/en/Pokemon/Cards/\(name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? name)",
+            updatedAt: "",
+            prices: cardMarketPrices
+        )
         
         // Create Set if setID and setName are available
         var set: Set? = nil
@@ -129,7 +142,7 @@ extension CardEntity {
             rules: nil,
             images: cardImages,
             tcgplayer: tcgPlayer,
-            cardmarket: nil,
+            cardmarket: cardmarket,
             number: number,
             set: set
         )
