@@ -44,6 +44,7 @@ class CardScannerService {
         case focused     // Focus on text regions only
         case edges       // Focus on card edges and borders
         case topSection  // Focus on the top section of the card (for card name)
+        case hpSection   // Focus on the top-right corner where HP is typically located
     }
     
     // MARK: - Card Detection and Recognition
@@ -120,6 +121,9 @@ class CardScannerService {
         case .topSection:
             // Optimize for card name at the top
             textRecognitionRequest.minimumTextHeight = 0.02
+        case .hpSection:
+            // Optimize for HP text which is usually larger
+            textRecognitionRequest.minimumTextHeight = 0.03
         default:
             textRecognitionRequest.minimumTextHeight = 0.015
         }
@@ -192,6 +196,19 @@ class CardScannerService {
             processedImage = applyNormalization(to: processedImage)
             processedImage = applySharpen(to: processedImage, intensity: 2.0)
             processedImage = applyContrast(to: processedImage, amount: 1.5)
+            
+        case .hpSection:
+            // Crop to the top-right corner where HP is typically located
+            let extent = ciImage.extent
+            let hpSection = CGRect(x: extent.origin.x + extent.width * 0.6, 
+                                  y: extent.origin.y + extent.height * 0.8, 
+                                  width: extent.width * 0.4, 
+                                  height: extent.height * 0.2)
+            processedImage = ciImage.cropped(to: hpSection)
+            processedImage = applyNormalization(to: processedImage)
+            processedImage = applySharpen(to: processedImage, intensity: 2.5)
+            processedImage = applyContrast(to: processedImage, amount: 1.7)
+            // Higher contrast for HP numbers which are often bold and red
         }
         
         // Convert back to UIImage
@@ -385,6 +402,7 @@ class CardScannerService {
         var potentialNames: [(name: String, score: Int)] = []
         var potentialSets: [(set: String, score: Int)] = []
         var potentialNumbers: [(number: String, score: Int)] = []
+        var potentialHPs: [(hp: String, score: Int)] = []
         
         print("Recognized text: \(recognizedText)")
         
@@ -412,18 +430,8 @@ class CardScannerService {
                 }
             }
             
-            // Look for HP value
-            if let range = cleanText.range(of: #"HP\s*\d+"#, options: [.regularExpression, .caseInsensitive]) {
-                let hpText = String(cleanText[range])
-                // Extract just the digits from the HP text
-                let hpDigits = hpText.components(separatedBy: CharacterSet.decimalDigits.inverted)
-                    .joined()
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                
-                if !hpDigits.isEmpty {
-                    cardInfo["hp"] = hpDigits
-                }
-            }
+            // Look for HP value - multiple formats and common OCR errors
+            extractHPValue(from: cleanText, potentialHPs: &potentialHPs)
             
             // Look for potential card names
             evaluatePotentialCardName(cleanText, potentialNames: &potentialNames)
@@ -447,7 +455,100 @@ class CardScannerService {
             cardInfo["number"] = bestNumber
         }
         
+        // Find the HP with the highest confidence score
+        if let bestHP = potentialHPs.max(by: { $0.score < $1.score })?.hp {
+            cardInfo["hp"] = bestHP
+        }
+        
         return cardInfo
+    }
+    
+    /// Extract HP value from text with multiple pattern matching for better accuracy
+    /// - Parameters:
+    ///   - text: The text to extract HP from
+    ///   - potentialHPs: Array to store potential HP values with confidence scores
+    private func extractHPValue(from text: String, potentialHPs: inout [(hp: String, score: Int)]) {
+        // Common patterns for HP values
+        let patterns = [
+            #"HP\s*(\d+)"#,             // Standard format: "HP 120"
+            #"(\d+)\s*HP"#,             // Reversed format: "120 HP"
+            #"HP[\s:-]*(\d+)"#,         // With various separators: "HP: 120", "HP-120"
+            #"(\d+)[\s:-]*HP"#,         // Reversed with separators: "120: HP", "120-HP"
+            #"[HM]P\s*(\d+)"#,          // Common OCR error: "MP 120" (H read as M)
+            #"(\d+)\s*[HM]P"#,          // Common OCR error reversed: "120 MP"
+            #"(\d+)\s*[Hh][Pp]"#,       // Mixed case: "120 Hp"
+            #"[Hh][Pp]\s*(\d+)"#        // Mixed case: "Hp 120"
+        ]
+        
+        // Try all patterns
+        for (index, pattern) in patterns.enumerated() {
+            if let regex = try? NSRegularExpression(pattern: pattern) {
+                let range = NSRange(text.startIndex..<text.endIndex, in: text)
+                if let match = regex.firstMatch(in: text, range: range) {
+                    // Extract the HP value (the first capture group)
+                    if let matchRange = Range(match.range(at: 1), in: text) {
+                        let hpValue = String(text[matchRange])
+                        
+                        // Score based on pattern reliability (earlier patterns are more reliable)
+                        let baseScore = 5 - min(index, 4) // 5 for first pattern, decreasing for later ones
+                        
+                        // Additional scoring factors
+                        var score = baseScore
+                        
+                        // Common HP values get higher scores
+                        let commonHPs = ["30", "40", "50", "60", "70", "80", "90", "100", "110", "120", 
+                                        "130", "140", "150", "160", "170", "180", "190", "200", "210", 
+                                        "220", "230", "240", "250", "260", "270", "280", "290", "300", 
+                                        "310", "320", "330", "340"]
+                        
+                        if commonHPs.contains(hpValue) {
+                            score += 2
+                        }
+                        
+                        // HP values that are multiples of 10 are more common
+                        if Int(hpValue)?.isMultiple(of: 10) == true {
+                            score += 1
+                        }
+                        
+                        // Very high HP values are less common and might be errors
+                        if let intValue = Int(hpValue), intValue > 350 {
+                            score -= 2
+                        }
+                        
+                        // Very low HP values are also less common
+                        if let intValue = Int(hpValue), intValue < 30 {
+                            score -= 1
+                        }
+                        
+                        potentialHPs.append((hpValue, score))
+                    }
+                }
+            }
+        }
+        
+        // Special case: sometimes HP is just a number by itself in the top right
+        // But we need to be careful not to confuse with card numbers
+        if text.count <= 4 && text.rangeOfCharacter(from: CharacterSet.decimalDigits.inverted) == nil {
+            // If it's just digits and reasonable length for HP
+            let hpValue = text
+            
+            if let intValue = Int(hpValue), intValue >= 30 && intValue <= 340 {
+                // Likely an HP value if in common range
+                var score = 1
+                
+                // Common HP values get higher scores
+                if intValue.isMultiple(of: 10) {
+                    score += 1
+                }
+                
+                // Common HP ranges
+                if intValue >= 60 && intValue <= 250 {
+                    score += 1
+                }
+                
+                potentialHPs.append((hpValue, score))
+            }
+        }
     }
     
     /// Evaluate if text could be a Pokemon card name and score its likelihood
@@ -594,6 +695,13 @@ class CardScannerService {
             }
         }
         
+        // Add HP section strategy for better HP recognition
+        let hpSectionResults = await withCheckedContinuation { continuation in
+            recognizeText(in: croppedImage, strategy: .hpSection) { strings in
+                continuation.resume(returning: strings)
+            }
+        }
+        
         if croppedImage.size != image.size {
             // If we successfully cropped the card, also try brightened strategy
             let brightenedResults = await withCheckedContinuation { continuation in
@@ -602,8 +710,16 @@ class CardScannerService {
                 }
             }
             
-            // Combine all results with priority to top section results
+            // Combine all results with priority to top section and HP section results
             var combinedResults = topSectionResults
+            
+            // Add HP section results with high priority
+            for string in hpSectionResults {
+                if !combinedResults.contains(string) {
+                    // Insert at beginning for higher priority
+                    combinedResults.insert(string, at: 0)
+                }
+            }
             
             for string in normalResults {
                 if !combinedResults.contains(string) {
@@ -625,8 +741,16 @@ class CardScannerService {
             
             return extractCardInfo(from: combinedResults)
         } else {
-            // If cropping failed, prioritize top section results
+            // If cropping failed, prioritize top section and HP section results
             var combinedResults = topSectionResults
+            
+            // Add HP section results with high priority
+            for string in hpSectionResults {
+                if !combinedResults.contains(string) {
+                    // Insert at beginning for higher priority
+                    combinedResults.insert(string, at: 0)
+                }
+            }
             
             for string in normalResults {
                 if !combinedResults.contains(string) {

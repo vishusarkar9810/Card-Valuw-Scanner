@@ -862,6 +862,8 @@ struct ScannerView: View {
             return "Searching for card by name..."
         case .numberSearch:
             return "Searching for card by number..."
+        case .hpSearch:
+            return "Searching for card by HP value..."
         case .visualSearch:
             return "Analyzing visual features..."
         case .failed:
