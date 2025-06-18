@@ -14,6 +14,11 @@ import SwiftUI
     var priceHistory: [(date: Date, price: Double)] = []
     var isPriceHistoryLoading = false
     
+    // Collection status
+    var isFavorite: Bool {
+        return persistenceManager.isCardInCollection(cardId: card.id)
+    }
+    
     init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
         self.card = card
         self.pokemonTCGService = pokemonTCGService
@@ -136,12 +141,8 @@ import SwiftUI
     
     // MARK: - Collection Management
     
-    func isInCollection() -> Bool {
-        return persistenceManager.isCardInCollection(cardId: card.id)
-    }
-    
-    func toggleCollectionStatus() {
-        if isInCollection() {
+    func toggleFavorite() {
+        if isFavorite {
             persistenceManager.removeCardFromCollection(cardId: card.id)
         } else {
             persistenceManager.addCardToCollection(card: card)
