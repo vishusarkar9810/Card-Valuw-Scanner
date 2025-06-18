@@ -148,9 +148,11 @@ struct CardDetailView: View {
                             }
                         }
                         
-                        Link("View on TCGPlayer", destination: URL(string: tcgplayer.url)!)
-                            .font(.subheadline)
-                            .padding(.top, 8)
+                        if let url = URL(string: tcgplayer.url) {
+                            Link("View on TCGPlayer", destination: url)
+                                .font(.subheadline)
+                                .padding(.top, 8)
+                        }
                     } else if let cardmarket = card.cardmarket, let prices = cardmarket.prices {
                         VStack(alignment: .leading, spacing: 8) {
                             if let avg = prices.averageSellPrice {
@@ -165,10 +167,13 @@ struct CardDetailView: View {
                                 priceRow(label: "Trend", value: trend)
                             }
                         }
+                        .padding(.leading, 8)
                         
-                        Link("View on Cardmarket", destination: URL(string: cardmarket.url)!)
-                            .font(.subheadline)
-                            .padding(.top, 8)
+                        if let url = URL(string: cardmarket.url) {
+                            Link("View on Cardmarket", destination: url)
+                                .font(.subheadline)
+                                .padding(.top, 8)
+                        }
                     } else {
                         Text("No price information available")
                             .foregroundColor(.secondary)
