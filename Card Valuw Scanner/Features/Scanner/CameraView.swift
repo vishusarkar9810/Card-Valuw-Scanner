@@ -12,8 +12,8 @@ struct CameraView: UIViewControllerRepresentable {
         
         // Check if camera is available, otherwise use photo library
         if UIImagePickerController.isSourceTypeAvailable(.camera) {
-            picker.sourceType = .camera
-            picker.cameraCaptureMode = .photo
+        picker.sourceType = .camera
+        picker.cameraCaptureMode = .photo
             
             // Configure camera settings for better card scanning
             if let cameraDevice = AVCaptureDevice.default(for: .video) {
@@ -127,7 +127,7 @@ struct CardScannerCameraView_Impl: View {
                     .overlay(controlsOverlay, alignment: .bottom)
             } else {
                 // Photo library view doesn't need the overlay
-                CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
+            CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
             }
         }
         .onAppear {
@@ -198,7 +198,7 @@ struct CardScannerCameraView_Impl: View {
                         .offset(x: 150, y: 210)
                         
                         // Target areas for important card information
-                        VStack {
+            VStack {
                             // Card name area
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(Color.yellow, lineWidth: 2)
@@ -239,8 +239,8 @@ struct CardScannerCameraView_Impl: View {
                         )
                 )
             
-            Spacer()
-            
+                Spacer()
+                
             // Add space at the bottom to avoid overlapping with system UI
             Spacer().frame(height: 100)
         }
@@ -279,9 +279,9 @@ struct CardScannerCameraView_Impl: View {
                     .background(Color.black.opacity(0.5))
                     .clipShape(Circle())
             }
-            
-            Spacer()
-            
+                
+                Spacer()
+                
             // Flashlight toggle button (only if available)
             if showingFlashlight {
                 Button(action: toggleFlashlight) {

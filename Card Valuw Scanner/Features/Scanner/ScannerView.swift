@@ -7,6 +7,7 @@ struct ScannerView: View {
     
     @State private var capturedImage: UIImage?
     @State private var showCamera = false
+    @State private var showLiveScanner = false
     @State private var showPhotoLibrary = false
     @State private var showResults = false
     @State private var showDebugInfo = false // Toggle for debug info
@@ -95,6 +96,10 @@ struct ScannerView: View {
                 // Use the camera view with camera source type
                 CardScannerCameraView(capturedImage: $capturedImage, isPresented: $showCamera)
             }
+            .sheet(isPresented: $showLiveScanner) {
+                // Use our new live card scanner view
+                LiveCardScannerView(capturedImage: $capturedImage, isPresented: $showLiveScanner)
+            }
             .sheet(isPresented: $showPhotoLibrary) {
                 // Use UIImagePickerController directly for photo library
                 CardImagePicker(selectedImage: $capturedImage, sourceType: .photoLibrary)
@@ -169,6 +174,22 @@ struct ScannerView: View {
             Spacer()
             
             VStack(spacing: 12) {
+                // New Live Scanning Button
+                Button(action: {
+                    showLiveScanner = true
+                }) {
+                    HStack {
+                        Image(systemName: "viewfinder.circle")
+                        Text("Live Card Scanning")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.green)
+                    .cornerRadius(12)
+                }
+                
                 Button(action: {
                     showCamera = true
                 }) {
@@ -200,7 +221,7 @@ struct ScannerView: View {
                     .cornerRadius(12)
                 }
             }
-            .padding(.horizontal)
+                    .padding(.horizontal)
             .padding(.bottom)
         }
     }
@@ -253,7 +274,7 @@ struct ScannerView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .cornerRadius(12)
                         } else if phase.error != nil {
-                            Image(systemName: "exclamationmark.triangle")
+                                    Image(systemName: "exclamationmark.triangle")
                                 .font(.system(size: 50))
                                 .foregroundColor(.orange)
                                 .frame(height: 300)
@@ -333,31 +354,31 @@ struct ScannerView: View {
         VStack(alignment: .leading, spacing: 8) {
             // Card type and HP
             HStack {
-                if let types = card.types, !types.isEmpty {
+                        if let types = card.types, !types.isEmpty {
                     HStack {
-                        ForEach(types, id: \.self) { type in
-                            Text(type)
+                            ForEach(types, id: \.self) { type in
+                                Text(type)
                                 .font(.subheadline)
                                 .padding(.horizontal, 8)
                                 .padding(.vertical, 4)
                                 .background(typeColor(for: type))
                                 .foregroundColor(.white)
-                                .cornerRadius(8)
+                                    .cornerRadius(8)
                         }
                     }
                 }
                 
                 Spacer()
-                
-                if let hp = card.hp {
+                    
+                    if let hp = card.hp {
                     Text("\(hp) HP")
-                        .font(.headline)
+                            .font(.headline)
                         .foregroundColor(.red)
                 }
-            }
-            
-            Divider()
-            
+                    }
+                    
+                    Divider()
+                    
             // Card subtypes and rarity
             if let subtypes = card.subtypes, !subtypes.isEmpty {
                 Text(subtypes.joined(separator: " • "))
@@ -383,35 +404,35 @@ struct ScannerView: View {
     
     private func pricingView(_ card: Card) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("Market Prices")
+                        Text("Market Prices")
                 .font(.headline)
-            
-            if let tcgplayer = card.tcgplayer, let prices = tcgplayer.prices {
+                        
+                        if let tcgplayer = card.tcgplayer, let prices = tcgplayer.prices {
                 // TCG Player prices
                 VStack(alignment: .leading, spacing: 5) {
-                    if let normal = prices.normal, let market = normal.market {
-                        priceRow(label: "Normal", value: market)
+                            if let normal = prices.normal, let market = normal.market {
+                                priceRow(label: "Normal", value: market)
+                            }
+                            
+                            if let holofoil = prices.holofoil, let market = holofoil.market {
+                                priceRow(label: "Holofoil", value: market)
+                            }
+                            
+                            if let reverseHolofoil = prices.reverseHolofoil, let market = reverseHolofoil.market {
+                                priceRow(label: "Reverse Holofoil", value: market)
                     }
-                    
-                    if let holofoil = prices.holofoil, let market = holofoil.market {
-                        priceRow(label: "Holofoil", value: market)
-                    }
-                    
-                    if let reverseHolofoil = prices.reverseHolofoil, let market = reverseHolofoil.market {
-                        priceRow(label: "Reverse Holofoil", value: market)
-                    }
-                }
-                
+                            }
+                            
                 // Last updated
                 Text("Last updated: \(formattedDate(tcgplayer.updatedAt))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
             } else if let cardmarket = card.cardmarket, let prices = cardmarket.prices {
                 // Cardmarket prices
                 VStack(alignment: .leading, spacing: 5) {
                     if let trendPrice = prices.trendPrice {
                         priceRow(label: "Trend Price", value: trendPrice, currency: "€")
-                    }
+                        }
                     
                     if let avgPrice = prices.averageSellPrice {
                         priceRow(label: "Average Sell Price", value: avgPrice, currency: "€")
@@ -419,7 +440,7 @@ struct ScannerView: View {
                     
                     if let lowPrice = prices.lowPrice {
                         priceRow(label: "Low Price", value: lowPrice, currency: "€")
-                    }
+                        }
                 }
                 
                 // Last updated
@@ -502,6 +523,22 @@ struct ScannerView: View {
             }
             
             VStack(spacing: 12) {
+                Button(action: {
+                    model.reset()
+                    showLiveScanner = true
+                }) {
+                    HStack {
+                        Image(systemName: "viewfinder.circle")
+                        Text("Try Live Card Scanner")
+                    }
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .frame(maxWidth: .infinity)
+                    .background(Color.green)
+                    .cornerRadius(12)
+                }
+                
                 Button(action: {
                     model.reset()
                     showCamera = true
@@ -616,6 +653,12 @@ struct ScannerView: View {
     private var scanningTipsView: some View {
         NavigationStack {
             List {
+                Section(header: Text("Scanning Modes")) {
+                    tipRow(icon: "viewfinder.circle", title: "Live Card Scanning", description: "Automatically detects card edges and captures when stable. Best for quick scanning.")
+                    tipRow(icon: "camera", title: "Manual Photo", description: "Take a photo manually. Good for difficult lighting conditions.")
+                    tipRow(icon: "photo", title: "Photo Library", description: "Select existing photos of cards from your library.")
+                }
+                
                 Section(header: Text("General Tips")) {
                     tipRow(icon: "light.max", title: "Good Lighting", description: "Ensure the card is well-lit without glare. Natural light works best.")
                     tipRow(icon: "camera.viewfinder", title: "Proper Framing", description: "Position the card within the green frame so all text is visible.")

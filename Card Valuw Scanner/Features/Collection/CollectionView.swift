@@ -88,7 +88,7 @@ struct CollectionView: View {
             }
             .task {
                 // Just load the collection without adding sample cards
-                model.loadCollection()
+                    model.loadCollection()
             }
             .refreshable {
                 model.loadCollection()
@@ -167,11 +167,11 @@ struct CollectionView: View {
                     Image(systemName: "camera")
                     Text("Scan Cards")
                 }
-                .font(.headline)
-                .foregroundColor(.white)
-                .padding()
-                .background(Color.blue)
-                .cornerRadius(12)
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .padding()
+                    .background(Color.blue)
+                    .cornerRadius(12)
             }
         }
         .padding()

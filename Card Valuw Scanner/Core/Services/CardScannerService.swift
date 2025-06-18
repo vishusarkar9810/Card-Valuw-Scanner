@@ -376,8 +376,8 @@ class CardScannerService {
                 
                 if !hpDigits.isEmpty {
                     cardInfo["hp"] = hpDigits
-                }
             }
+        }
         
             // Look for potential card names
             evaluatePotentialCardName(cleanText, potentialNames: &potentialNames)
