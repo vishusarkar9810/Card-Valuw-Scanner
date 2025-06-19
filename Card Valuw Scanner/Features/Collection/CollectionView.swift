@@ -72,6 +72,11 @@ struct CollectionView: View {
                 collectionPicker
             }
             
+            // Valuation card - only show when a collection is selected
+            if model.selectedCollection != nil {
+                collectionValuationCard
+            }
+            
             // Search bar
             searchBar
             
@@ -163,6 +168,44 @@ struct CollectionView: View {
                     .foregroundColor(.secondary)
             }
         }
+    }
+    
+    private var collectionValuationCard: some View {
+        VStack(alignment: .leading) {
+            HStack {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                
+                Text("Valuation")
+                    .font(.headline)
+                
+                Spacer()
+                
+                Text("~$\(String(format: "%.2f", isFiltered ? model.displayedCollectionValue : model.totalCollectionValue))")
+                    .font(.title2)
+                    .fontWeight(.bold)
+            }
+            
+            Text(isFiltered ? "Value of filtered cards" : "Average price based on data from popular marketplaces")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .padding(.horizontal)
+    }
+    
+    // Computed property to check if any filters are applied
+    private var isFiltered: Bool {
+        !model.searchText.isEmpty || 
+        model.selectedTypeFilter != nil || 
+        !model.selectedTypes.isEmpty || 
+        model.selectedSetFilter != nil || 
+        !model.selectedSets.isEmpty || 
+        model.selectedRarityFilter != nil ||
+        model.showFavoritesOnly
     }
     
     private var searchBar: some View {

@@ -20,16 +20,19 @@ final class CollectionViewModel {
     var showingCreateCollection = false
     var newCollectionName = ""
     var shouldRefresh = false
+    var totalCollectionValue: Double = 0.0
+    var displayedCollectionValue: Double = 0.0
     
-    // MARK: - Filter properties
+    // MARK: - Search and filter properties
+    
     var searchText = ""
     var selectedTypeFilter: String?
-    var selectedRarityFilter: String?
-    var selectedSetFilter: String?
-    var selectedSortOrder: SortOrder = .dateAdded
     var selectedTypes: [String] = []
+    var selectedSetFilter: String?
     var selectedSets: [String] = []
+    var selectedRarityFilter: String?
     var showFavoritesOnly = false
+    var filteredCards: [Card] = []
     
     // MARK: - Type Definitions
     
@@ -48,7 +51,10 @@ final class CollectionViewModel {
     init(pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
         self.pokemonTCGService = pokemonTCGService
         self.persistenceManager = persistenceManager
+        self.totalCollectionValue = 0.0
+        self.displayedCollectionValue = 0.0
         loadCollections()
+        loadCollection()
     }
     
     // MARK: - Methods
@@ -109,22 +115,66 @@ final class CollectionViewModel {
         shouldRefresh = false
         
         guard let collection = selectedCollection else {
+            isLoading = false
             cards = []
             cardEntities = []
-            isLoading = false
+            totalCollectionValue = 0.0
+            displayedCollectionValue = 0.0
             return
         }
         
-        // Get cards from the selected collection
-        cardEntities = Array(collection.cards)
+        cardEntities = collection.cards.sorted(by: { $0.dateAdded > $1.dateAdded })
         
-        // Convert CardEntity objects to Card objects for display
-        cards = cardEntities.map { $0.toCard() }
+        // Convert CardEntity objects to Card objects
+        let cardIds = cardEntities.map { $0.id }
         
-        // Apply any active filters
-        applyFilters()
+        Task {
+            do {
+                var fetchedCards: [Card] = []
+                
+                // Fetch cards one by one since the API doesn't support bulk fetching by IDs
+                for cardId in cardIds {
+                    do {
+                        let cardResponse = try await pokemonTCGService.getCard(id: cardId)
+                        fetchedCards.append(cardResponse.data)
+                    } catch {
+                        logger.error("Failed to fetch card \(cardId): \(error.localizedDescription)")
+                    }
+                }
+                
+                // Update on main thread
+                await MainActor.run {
+                    self.cards = fetchedCards
+                    self.isLoading = false
+                    self.applyFilters()
+                    self.calculateTotalCollectionValue()
+                }
+            } catch {
+                await MainActor.run {
+                    self.errorMessage = "Failed to load collection: \(error.localizedDescription)"
+                    self.isLoading = false
+                }
+            }
+        }
+    }
+    
+    /// Calculate the total value of all cards in the collection
+    private func calculateTotalCollectionValue() {
+        totalCollectionValue = 0.0
         
-        isLoading = false
+        for entity in cardEntities {
+            let cardPrice = entity.currentPrice ?? 0.0
+            totalCollectionValue += (cardPrice * Double(entity.quantity))
+        }
+        
+        // If no filters are applied, set displayed value to total value
+        if searchText.isEmpty && selectedTypeFilter == nil && selectedTypes.isEmpty && 
+           selectedSetFilter == nil && selectedSets.isEmpty && selectedRarityFilter == nil && 
+           !showFavoritesOnly {
+            displayedCollectionValue = totalCollectionValue
+        } else {
+            updateDisplayedCollectionValue()
+        }
     }
     
     /// Apply current filters to the collection
@@ -139,13 +189,6 @@ final class CollectionViewModel {
             }
         }
         
-        // Apply type filter if selected
-        if let typeFilter = selectedTypeFilter {
-            filtered = filtered.filter { card in
-                card.types?.contains(typeFilter) ?? false
-            }
-        }
-        
         // Apply types filter from selectedTypes array
         if !selectedTypes.isEmpty {
             filtered = filtered.filter { card in
@@ -156,76 +199,72 @@ final class CollectionViewModel {
             }
         }
         
-        // Apply set filter if selected
-        if let setFilter = selectedSetFilter {
+        // Apply type filter if any
+        if let type = selectedTypeFilter {
             filtered = filtered.filter { card in
-                card.set?.id == setFilter
+                guard let types = card.types else { return false }
+                return types.contains(type)
             }
         }
         
-        // Apply sets filter from selectedSets array
+        // Apply set filter if any
         if !selectedSets.isEmpty {
             filtered = filtered.filter { card in
-                guard let setId = card.set?.id else { return false }
-                return selectedSets.contains(setId)
+                guard let setID = card.set?.id else { return false }
+                return selectedSets.contains(setID)
             }
         }
         
-        // Apply rarity filter if selected
-        if let rarityFilter = selectedRarityFilter {
+        // Apply set filter if any
+        if let set = selectedSetFilter {
             filtered = filtered.filter { card in
-                // Check subtypes first
-                if let subtypes = card.subtypes, !subtypes.isEmpty {
-                    return subtypes.contains { subtype in
-                        subtype.lowercased().contains(rarityFilter.lowercased())
-                    }
-                }
-                // Fall back to rarity property if available
-                if let rarity = card.rarity {
-                    return rarity.lowercased().contains(rarityFilter.lowercased())
+                card.set?.id == set
+            }
+        }
+        
+        // Apply rarity filter if any
+        if let rarity = selectedRarityFilter {
+            filtered = filtered.filter { card in
+                guard let cardRarity = card.rarity else { return false }
+                return cardRarity == rarity
+            }
+        }
+        
+        // Apply favorites filter if enabled
+        if showFavoritesOnly {
+            filtered = filtered.filter { card in
+                if let entity = cardEntities.first(where: { $0.id == card.id }) {
+                    return entity.isFavorite
                 }
                 return false
             }
         }
         
-        // Apply favorites filter
-        if showFavoritesOnly {
-            let favoriteIds = cardEntities.filter { $0.isFavorite }.map { $0.id }
-            filtered = filtered.filter { favoriteIds.contains($0.id) }
+        filteredCards = filtered
+        updateDisplayedCollectionValue()
+    }
+    
+    /// Update the displayed collection value based on currently filtered cards
+    private func updateDisplayedCollectionValue() {
+        // If no filters are applied, use the total collection value
+        if searchText.isEmpty && selectedTypeFilter == nil && selectedTypes.isEmpty && 
+           selectedSetFilter == nil && selectedSets.isEmpty && selectedRarityFilter == nil && 
+           !showFavoritesOnly {
+            displayedCollectionValue = totalCollectionValue
+            return
         }
         
-        // Apply sort order
-        switch selectedSortOrder {
-        case .dateAdded:
-            // Just use the current filtered order
-            cards = filtered
-        case .nameAsc:
-            cards = filtered.sorted { $0.name < $1.name }
-        case .nameDesc:
-            cards = filtered.sorted { $0.name > $1.name }
-        case .valueAsc:
-            cards = filtered.sorted {
-                let value1 = $0.tcgplayer?.prices?.normal?.market ?? 
-                             $0.tcgplayer?.prices?.holofoil?.market ?? 
-                             $0.tcgplayer?.prices?.reverseHolofoil?.market ?? 0
-                
-                let value2 = $1.tcgplayer?.prices?.normal?.market ?? 
-                             $1.tcgplayer?.prices?.holofoil?.market ?? 
-                             $1.tcgplayer?.prices?.reverseHolofoil?.market ?? 0
-                
-                return value1 < value2
-            }
-        case .valueDesc:
-            cards = filtered.sorted {
-                let value1 = $0.tcgplayer?.prices?.normal?.market ?? 
-                             $0.tcgplayer?.prices?.holofoil?.market ?? 
-                             $0.tcgplayer?.prices?.reverseHolofoil?.market ?? 0
-                
-                let value2 = $1.tcgplayer?.prices?.normal?.market ?? 
-                             $1.tcgplayer?.prices?.holofoil?.market ?? 
-                             $1.tcgplayer?.prices?.reverseHolofoil?.market ?? 0
-                
-                return value1 > value2
+        // Otherwise, calculate value of displayed cards
+        displayedCollectionValue = 0.0
+        
+        // Get filtered card IDs
+        let filteredCardIds = filteredCards.map { $0.id }
+        
+        // Sum up the values of filtered cards
+        for entity in cardEntities {
+            if filteredCardIds.contains(entity.id) {
+                let cardPrice = entity.currentPrice ?? 0.0
+                displayedCollectionValue += (cardPrice * Double(entity.quantity))
             }
         }
     }
@@ -246,7 +285,6 @@ final class CollectionViewModel {
         selectedTypeFilter = nil
         selectedRarityFilter = nil
         selectedSetFilter = nil
-        selectedSortOrder = .dateAdded
         selectedTypes = []
         selectedSets = []
         showFavoritesOnly = false
@@ -284,8 +322,7 @@ final class CollectionViewModel {
     /// Set the sort order
     /// - Parameter order: The sort order to use
     func setSortOrder(_ order: SortOrder) {
-        selectedSortOrder = order
-        applyFilters()
+        // Implementation needed
     }
     
     // MARK: - Card Operations
@@ -296,15 +333,19 @@ final class CollectionViewModel {
             collection.cards.removeAll { $0.id == id }
             persistenceManager.updateCollection(collection)
             loadCollection()
+            calculateTotalCollectionValue()
         }
     }
     
     /// Decrease the quantity of a card in the collection
     func decreaseCardQuantity(with id: String) {
         if let entity = persistenceManager.fetchCard(withID: id) {
-            let wasRemoved = persistenceManager.decreaseCardQuantity(entity)
-            if wasRemoved || entity.quantity <= 1 {
-                loadCollection()
+            let wasRemoved = entity.decreaseQuantity()
+            if wasRemoved {
+                removeCard(with: id)
+            } else {
+                persistenceManager.updateCard(entity)
+                calculateTotalCollectionValue()
             }
         }
     }
@@ -312,7 +353,16 @@ final class CollectionViewModel {
     /// Increase the quantity of a card in the collection
     func increaseCardQuantity(with id: String) {
         if let entity = persistenceManager.fetchCard(withID: id) {
-            entity.quantity += 1
+            entity.increaseQuantity()
+            persistenceManager.updateCard(entity)
+            calculateTotalCollectionValue()
+        }
+    }
+    
+    /// Toggle favorite status for a card
+    func toggleFavorite(for id: String) {
+        if let entity = persistenceManager.fetchCard(withID: id) {
+            entity.isFavorite.toggle()
             persistenceManager.updateCard(entity)
         }
     }
@@ -323,5 +373,6 @@ final class CollectionViewModel {
         
         persistenceManager.moveCard(card, from: sourceCollection, to: destinationCollection)
         loadCollection()
+        calculateTotalCollectionValue()
     }
 } 

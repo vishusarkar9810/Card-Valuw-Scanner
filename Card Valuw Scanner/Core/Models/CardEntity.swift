@@ -83,6 +83,17 @@ final class CardEntity {
 
 // Extension to convert CardEntity back to Card model if needed
 extension CardEntity {
+    // Increase the quantity of a card
+    func increaseQuantity() {
+        self.quantity += 1
+    }
+    
+    // Decrease the quantity of a card and return true if it should be removed
+    func decreaseQuantity() -> Bool {
+        self.quantity -= 1
+        return self.quantity <= 0
+    }
+    
     func toCard() -> Card {
         let cardImages = CardImages(small: imageSmallURL, large: imageLargeURL)
         
