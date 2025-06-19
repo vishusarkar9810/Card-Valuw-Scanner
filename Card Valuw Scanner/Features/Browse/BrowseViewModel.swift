@@ -13,7 +13,7 @@ final class BrowseViewModel {
     
     // Services
     let pokemonTCGService: PokemonTCGService
-    let persistenceManager: PersistenceManager
+    var persistenceManager: PersistenceManager
     
     // State
     var sets: [Set] = []
@@ -30,7 +30,22 @@ final class BrowseViewModel {
         self.persistenceManager = persistenceManager
     }
     
+    /// Convenience initializer with just persistence manager
+    /// - Parameter persistenceManager: The persistence manager to use
+    convenience init(persistenceManager: PersistenceManager) {
+        self.init(
+            pokemonTCGService: PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey),
+            persistenceManager: persistenceManager
+        )
+    }
+    
     // MARK: - Methods
+    
+    /// Update the persistence manager
+    /// - Parameter persistenceManager: The new persistence manager instance
+    func updatePersistenceManager(_ persistenceManager: PersistenceManager) {
+        self.persistenceManager = persistenceManager
+    }
     
     /// Load all Pokemon card sets
     func loadSets() async {
@@ -132,6 +147,10 @@ final class BrowseViewModel {
     /// Add a card to the user's collection
     /// - Parameter card: The card to add
     func addCardToCollection(_ card: Card) {
-        let _ = persistenceManager.addCard(card)
+        // Get the default collection
+        let collections = persistenceManager.fetchAllCollections()
+        if let defaultCollection = collections.first(where: { $0.isDefault }) ?? collections.first {
+            let _ = persistenceManager.addCard(card, to: defaultCollection)
+        }
     }
 } 

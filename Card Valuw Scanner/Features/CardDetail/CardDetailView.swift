@@ -15,6 +15,16 @@ struct CardDetailView: View {
         ))
     }
     
+    init(card: Card, collection: CollectionEntity?, persistenceManager: PersistenceManager) {
+        self.card = card
+        self._viewModel = State(initialValue: CardDetailViewModel(
+            card: card,
+            pokemonTCGService: PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey),
+            persistenceManager: persistenceManager,
+            collection: collection
+        ))
+    }
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {

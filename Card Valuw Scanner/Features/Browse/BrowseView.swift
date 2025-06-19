@@ -4,18 +4,15 @@ import SwiftData
 struct BrowseView: View {
     // MARK: - Properties
     
-    let viewModel: BrowseViewModel
+    var viewModel: BrowseViewModel
     @State private var searchText: String = ""
     @State private var selectedSet: Set? = nil
     @State private var selectedCard: Card? = nil
     
     // MARK: - Initialization
     
-    init(pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
-        self.viewModel = BrowseViewModel(
-            pokemonTCGService: pokemonTCGService,
-            persistenceManager: persistenceManager
-        )
+    init(model: BrowseViewModel) {
+        self.viewModel = model
     }
     
     // MARK: - Body
@@ -274,15 +271,64 @@ struct SetListItem: View {
     }
 }
 
-#Preview {
-    let config = ModelConfiguration(isStoredInMemoryOnly: true)
-    let container = try! ModelContainer(for: CardEntity.self, configurations: config)
+struct CardGridItem: View {
+    let card: Card
     
-    let persistenceManager = PersistenceManager(modelContext: ModelContext(container))
-    let pokemonTCGService = PokemonTCGService(apiKey: "your-api-key")
-    
-    BrowseView(
-        pokemonTCGService: pokemonTCGService,
-        persistenceManager: persistenceManager
-    )
-} 
+    var body: some View {
+        VStack {
+            if let imageUrl = URL(string: card.images.small) {
+                AsyncImage(url: imageUrl) { phase in
+                    if let image = phase.image {
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fit)
+                    } else {
+                        Rectangle()
+                            .foregroundColor(.gray.opacity(0.2))
+                            .aspectRatio(2/3, contentMode: .fit)
+                            .overlay(
+                                ProgressView()
+                            )
+                    }
+                }
+                .cornerRadius(8)
+            }
+            
+            VStack(alignment: .leading, spacing: 2) {
+                Text(card.name)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+                
+                HStack {
+                    Text(card.number ?? "")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    Text(card.supertype)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+    }
+}
+
+// MARK: - Preview
+
+struct BrowseView_Previews: PreviewProvider {
+    static var previews: some View {
+        let config = ModelConfiguration(isStoredInMemoryOnly: true)
+        let container = try! ModelContainer(for: CardEntity.self, configurations: config)
+        
+        let persistenceManager = PersistenceManager(modelContext: ModelContext(container))
+        let pokemonTCGService = PokemonTCGService(apiKey: "your-api-key")
+        let viewModel = BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
+        
+        return BrowseView(model: viewModel)
+    }
+}

@@ -727,7 +727,7 @@ class CardScannerService {
             }
             
             // Try all patterns
-            for (index, pattern) in patterns.enumerated() {
+            for (_, pattern) in patterns.enumerated() {
                 if let regex = try? NSRegularExpression(pattern: pattern) {
                     let range = NSRange(text.startIndex..<text.endIndex, in: text)
                     if let match = regex.firstMatch(in: text, range: range) {

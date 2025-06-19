@@ -124,7 +124,7 @@ class PokemonTCGService {
         }
         
         // Ensure the last price is close to the current price
-        if let lastDate = priceHistory.last?.date {
+        if priceHistory.last != nil {
             priceHistory.append((date: today, price: basePrice))
         }
         

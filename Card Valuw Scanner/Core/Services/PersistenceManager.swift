@@ -8,11 +8,44 @@ final class PersistenceManager {
     private let logger = Logger(subsystem: "com.app.cardvaluescanner", category: "PersistenceManager")
     private let modelContext: ModelContext
     
+    // Default collection
+    private var defaultCollection: CollectionEntity?
+    
     // MARK: - Initialization
     
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         logger.debug("Successfully initialized PersistenceManager with ModelContext")
+        
+        // Initialize default collection if needed
+        initializeDefaultCollection()
+    }
+    
+    /// Initializes the default collection if it doesn't exist
+    private func initializeDefaultCollection() {
+        let predicate = #Predicate<CollectionEntity> { collection in
+            collection.isDefault == true
+        }
+        
+        do {
+            let defaultCollections = try modelContext.fetch(FetchDescriptor<CollectionEntity>(predicate: predicate))
+            if defaultCollections.isEmpty {
+                // Create default collection
+                let favorites = CollectionEntity(name: "Favorites", isDefault: true)
+                modelContext.insert(favorites)
+                
+                // Create "My Collection" as well
+                let myCollection = CollectionEntity(name: "My Collection")
+                modelContext.insert(myCollection)
+                
+                saveChanges()
+                defaultCollection = favorites
+            } else {
+                defaultCollection = defaultCollections.first
+            }
+        } catch {
+            logger.error("Failed to initialize default collection: \(error.localizedDescription)")
+        }
     }
     
     // MARK: - Card Operations
@@ -125,25 +158,102 @@ final class PersistenceManager {
     
     // MARK: - Collection Management
     
-    /// Checks if a card is in the user's collection
-    /// - Parameter cardId: The ID of the card to check
-    /// - Returns: True if the card is in the collection, false otherwise
-    func isCardInCollection(cardId: String) -> Bool {
-        return fetchCard(withID: cardId) != nil
-    }
-    
-    /// Adds a card to the user's collection
-    /// - Parameter card: The card to add to the collection
-    func addCardToCollection(card: Card) {
-        _ = addCard(card)
-    }
-    
-    /// Removes a card from the user's collection by ID
-    /// - Parameter cardId: The ID of the card to remove
-    func removeCardFromCollection(cardId: String) {
-        if let cardEntity = fetchCard(withID: cardId) {
-            removeCard(cardEntity)
+    /// Fetches all collections
+    /// - Returns: An array of collection entities
+    func fetchAllCollections() -> [CollectionEntity] {
+        do {
+            let descriptor = FetchDescriptor<CollectionEntity>(sortBy: [SortDescriptor(\.dateCreated, order: .reverse)])
+            return try modelContext.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch collections: \(error.localizedDescription)")
+            return []
         }
+    }
+    
+    /// Creates a new collection
+    /// - Parameter name: The name of the collection
+    /// - Returns: The created collection entity
+    @discardableResult
+    func createCollection(name: String, imageURL: String? = nil) -> CollectionEntity {
+        let collection = CollectionEntity(name: name, imageURL: imageURL)
+        modelContext.insert(collection)
+        saveChanges()
+        return collection
+    }
+    
+    /// Deletes a collection
+    /// - Parameter collection: The collection to delete
+    func deleteCollection(_ collection: CollectionEntity) {
+        // Don't delete the default collection
+        if collection.isDefault {
+            return
+        }
+        
+        modelContext.delete(collection)
+        saveChanges()
+    }
+    
+    /// Updates a collection
+    /// - Parameter collection: The collection to update
+    func updateCollection(_ collection: CollectionEntity) {
+        saveChanges()
+    }
+    
+    /// Adds a card to a collection
+    /// - Parameters:
+    ///   - card: The card to add
+    ///   - collection: The collection to add the card to
+    /// - Returns: The card entity
+    @discardableResult
+    func addCard(_ card: Card, to collection: CollectionEntity? = nil) -> CardEntity {
+        // Get the target collection (default if none specified)
+        let targetCollection = collection ?? defaultCollection ?? {
+            let defaultCollection = createCollection(name: "Favorites", imageURL: nil)
+            defaultCollection.isDefault = true
+            return defaultCollection
+        }()
+        
+        // Check if card already exists in the collection
+        let existingCard = targetCollection.cards.first { $0.id == card.id }
+        
+        if let existingCard = existingCard {
+            // Increment quantity
+            existingCard.quantity += 1
+            saveChanges()
+            return existingCard
+        } else {
+            // Create new card entity
+            let cardEntity = CardEntity(from: card)
+            modelContext.insert(cardEntity)
+            
+            // Add to collection
+            targetCollection.cards.append(cardEntity)
+            saveChanges()
+            return cardEntity
+        }
+    }
+    
+    /// Moves a card from one collection to another
+    /// - Parameters:
+    ///   - card: The card to move
+    ///   - sourceCollection: The source collection
+    ///   - destinationCollection: The destination collection
+    func moveCard(_ card: CardEntity, from sourceCollection: CollectionEntity, to destinationCollection: CollectionEntity) {
+        // Remove from source collection
+        sourceCollection.cards.removeAll { $0.id == card.id }
+        
+        // Add to destination collection
+        destinationCollection.cards.append(card)
+        saveChanges()
+    }
+    
+    /// Checks if a card is in a specific collection
+    /// - Parameters:
+    ///   - cardId: The ID of the card
+    ///   - collection: The collection to check
+    /// - Returns: True if the card is in the collection, false otherwise
+    func isCardInCollection(_ cardId: String, in collection: CollectionEntity) -> Bool {
+        return collection.cards.contains { $0.id == cardId }
     }
     
     // MARK: - Helper Methods

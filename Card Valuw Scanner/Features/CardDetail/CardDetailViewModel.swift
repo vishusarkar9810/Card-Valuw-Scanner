@@ -4,6 +4,7 @@ import SwiftUI
 @Observable final class CardDetailViewModel {
     private let pokemonTCGService: PokemonTCGService
     private let persistenceManager: PersistenceManager
+    private let collection: CollectionEntity?
     
     let card: Card
     var relatedCards: [Card] = []
@@ -16,13 +17,25 @@ import SwiftUI
     
     // Collection status
     var isFavorite: Bool {
-        return persistenceManager.isCardInCollection(cardId: card.id)
+        // Check if card is in any collection
+        let collections = persistenceManager.fetchAllCollections()
+        return collections.contains { collection in
+            collection.cards.contains { $0.id == card.id }
+        }
     }
     
     init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
         self.card = card
         self.pokemonTCGService = pokemonTCGService
         self.persistenceManager = persistenceManager
+        self.collection = nil
+    }
+    
+    init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager, collection: CollectionEntity?) {
+        self.card = card
+        self.pokemonTCGService = pokemonTCGService
+        self.persistenceManager = persistenceManager
+        self.collection = collection
     }
     
     // MARK: - Related Cards
@@ -142,10 +155,21 @@ import SwiftUI
     // MARK: - Collection Management
     
     func toggleFavorite() {
+        // Find the default collection (Favorites)
+        let collections = persistenceManager.fetchAllCollections()
+        let favoritesCollection = collections.first { $0.isDefault } ?? collections.first
+        
         if isFavorite {
-            persistenceManager.removeCardFromCollection(cardId: card.id)
-        } else {
-            persistenceManager.addCardToCollection(card: card)
+            // Find the card in collections and remove it
+            if persistenceManager.fetchCard(withID: card.id) != nil {
+                for collection in collections where collection.cards.contains(where: { $0.id == card.id }) {
+                    collection.cards.removeAll { $0.id == card.id }
+                    persistenceManager.updateCollection(collection)
+                }
+            }
+        } else if let favoritesCollection = favoritesCollection {
+            // Add the card to the favorites collection
+            let _ = persistenceManager.addCard(card, to: favoritesCollection)
         }
     }
 } 

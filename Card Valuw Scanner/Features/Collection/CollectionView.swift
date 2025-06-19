@@ -1,14 +1,24 @@
 import SwiftUI
 import UIKit
+import SwiftData
 
 struct CollectionView: View {
     // MARK: - Properties
     
-    let model: CollectionViewModel
+    @State private var model: CollectionViewModel
     
     @State private var showingFilters = false
     @State private var selectedCard: Card? = nil
     @State private var searchText: String = ""
+    @State private var showingCollectionsList = true
+    
+    // MARK: - State properties
+    @State private var showingSortOptions = false
+    @State private var showingFilterOptions = false
+    
+    init(model: CollectionViewModel) {
+        self._model = State(initialValue: model)
+    }
     
     // MARK: - Body
     
@@ -19,412 +29,583 @@ struct CollectionView: View {
                     loadingView
                 } else if let errorMessage = model.errorMessage {
                     errorView(errorMessage)
-                } else if model.cards.isEmpty {
+                } else if model.collections.isEmpty {
+                    emptyStateView
+                } else if model.cardEntities.isEmpty && model.selectedCollection != nil {
                     emptyCollectionView
                 } else {
-                    collectionGridView
+                    collectionContent
                 }
             }
-            .navigationTitle("My Collection")
+            .navigationTitle("Collections")
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button(action: {
-                        showingFilters = true
-                    }) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                    }
-                }
-                
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Sort by Name") {
-                            // Sort by name
-                        }
-                        Button("Sort by Value") {
-                            // Sort by value
-                        }
-                        Button("Sort by Set") {
-                            // Sort by set
-                        }
-                        Divider()
-                        Button(model.showFavoritesOnly ? "Show All Cards" : "Show Favorites Only") {
-                            model.showFavoritesOnly.toggle()
-                            model.applyFilters()
-                        }
-                    } label: {
-                        Image(systemName: "arrow.up.arrow.down")
+                    Button(action: {
+                        model.showingCreateCollection = true
+                    }) {
+                        Image(systemName: "plus")
                     }
                 }
             }
-            .searchable(text: $searchText, prompt: "Search your collection")
-            .onChange(of: searchText) { _, newValue in
-                model.searchText = newValue
-                model.applyFilters()
+            .sheet(isPresented: $model.showingCreateCollection) {
+                createCollectionView
             }
-            .sheet(isPresented: $showingFilters) {
-                FilterView(
-                    selectedTypes: model.selectedTypes,
-                    selectedSets: model.selectedSets,
-                    onTypeSelection: { types in
-                        model.selectedTypes = types
-                        model.applyFilters()
-                    },
-                    onSetSelection: { sets in
-                        model.selectedSets = sets
-                        model.applyFilters()
-                    },
-                    onApply: {
-                        model.applyFilters()
-                    },
-                    onReset: {
-                        model.resetFilters()
-                        searchText = ""
-                    }
-                )
-                .presentationDetents([.medium, .large])
-            }
-            .navigationDestination(item: $selectedCard) { card in
-                CardDetailView(
-                    card: card,
-                    pokemonTCGService: model.pokemonTCGService,
-                    persistenceManager: model.persistenceManager
-                )
-            }
-            .task {
-                // Just load the collection without adding sample cards
+            .onAppear {
+                if model.shouldRefresh {
                     model.loadCollection()
+                }
             }
-            .refreshable {
-                model.loadCollection()
+        }
+        .searchable(text: $searchText, prompt: "Search cards")
+        .onChange(of: searchText) {
+            model.searchText = searchText
+            model.applyFilters()
+        }
+    }
+    
+    // MARK: - Collection Content View
+    
+    private var collectionContent: some View {
+        VStack {
+            // Collection picker at top
+            if !model.collections.isEmpty {
+                collectionPicker
             }
+            
+            // Search bar
+            searchBar
+            
+            // Cards grid
+            cardsGrid
         }
     }
     
     // MARK: - Subviews
     
+    private var collectionPicker: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 15) {
+                ForEach(model.collections) { collection in
+                    collectionButton(for: collection)
+                }
+                
+                // "Create New" collection button
+                Button(action: {
+                    model.showingCreateCollection = true
+                }) {
+                    VStack {
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color.gray.opacity(0.1))
+                                .aspectRatio(1, contentMode: .fit)
+                                .frame(width: 120, height: 120)
+                            
+                            Image(systemName: "plus.circle")
+                                .font(.largeTitle)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Text("Create New")
+                            .font(.headline)
+                        
+                        Text("\(0) cards")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding(.top)
+    }
+    
+    private func collectionButton(for collection: CollectionEntity) -> some View {
+        Button(action: {
+            model.selectCollection(collection)
+        }) {
+            VStack {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(model.selectedCollection?.id == collection.id ? Color.blue.opacity(0.1) : Color.gray.opacity(0.1))
+                        .aspectRatio(1, contentMode: .fit)
+                        .frame(width: 120, height: 120)
+                    
+                    if collection.imageURL != nil, let url = URL(string: collection.imageURL!) {
+                        AsyncImage(url: url) { phase in
+                            if let image = phase.image {
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                                    .cornerRadius(12)
+                            } else {
+                                Image(systemName: "folder")
+                                    .font(.largeTitle)
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    } else {
+                        Image(systemName: "folder")
+                            .font(.largeTitle)
+                            .foregroundColor(.blue)
+                    }
+                }
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12)
+                        .stroke(model.selectedCollection?.id == collection.id ? Color.blue : Color.clear, lineWidth: 3)
+                )
+                
+                Text(collection.name)
+                    .font(.headline)
+                    .lineLimit(1)
+                
+                Text("\(collection.cardCount) cards")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+    
+    private var searchBar: some View {
+        HStack {
+            HStack {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                
+                TextField("Search cards", text: $model.searchText)
+                    .onChange(of: model.searchText) { oldValue, newValue in
+                        model.applyFilters()
+                    }
+                
+                if !model.searchText.isEmpty {
+                    Button(action: {
+                        model.searchText = ""
+                        model.applyFilters()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            .padding(8)
+            .background(Color(.systemGray6))
+            .cornerRadius(10)
+        }
+        .padding(.horizontal)
+        .padding(.top, 8)
+    }
+    
+    private var cardsGrid: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 16) {
+                ForEach(model.cardEntities) { cardEntity in
+                    cardCell(for: cardEntity)
+                }
+            }
+            .padding()
+        }
+    }
+    
+    private func cardCell(for cardEntity: CardEntity) -> some View {
+        let card = cardEntity.toCard()
+        return Button(action: {
+            selectedCard = card
+        }) {
+            VStack {
+                // Card image
+                if let url = URL(string: cardEntity.imageSmallURL) {
+                    AsyncImage(url: url) { phase in
+                        if let image = phase.image {
+                            image
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .cornerRadius(8)
+                        } else if phase.error != nil {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .aspectRatio(2/3, contentMode: .fit)
+                                .cornerRadius(8)
+                                .overlay(
+                                    Image(systemName: "exclamationmark.triangle")
+                                        .foregroundColor(.orange)
+                                )
+                        } else {
+                            Rectangle()
+                                .fill(Color.gray.opacity(0.2))
+                                .aspectRatio(2/3, contentMode: .fit)
+                                .cornerRadius(8)
+                                .overlay(
+                                    ProgressView()
+                                )
+                        }
+                    }
+                }
+                
+                // Card info
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(cardEntity.name)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    
+                    if let setName = cardEntity.setName {
+                        Text(setName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                    }
+                    
+                    // Price & quantity
+                    HStack {
+                        if let price = cardEntity.currentPrice {
+                            Text("$\(String(format: "%.2f", price))")
+                                .font(.callout)
+                                .fontWeight(.bold)
+                                .foregroundColor(.blue)
+                        }
+                        
+                        Spacer()
+                        
+                        if cardEntity.quantity > 1 {
+                            Text("×\(cardEntity.quantity)")
+                                .font(.caption)
+                                .padding(4)
+                                .background(Color.gray.opacity(0.2))
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+                .padding(.horizontal, 4)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            Button(action: {
+                if let entity = model.persistenceManager.fetchCard(withID: cardEntity.id) {
+                    model.persistenceManager.toggleFavorite(entity)
+                    model.loadCollection()
+                }
+            }) {
+                Label(
+                    cardEntity.isFavorite ? "Remove from Favorites" : "Add to Favorites",
+                    systemImage: cardEntity.isFavorite ? "heart.fill" : "heart"
+                )
+            }
+            
+            Button(action: {
+                model.removeCard(with: cardEntity.id)
+            }) {
+                Label("Remove from Collection", systemImage: "trash")
+            }
+            
+            Menu("Move to...") {
+                ForEach(model.collections) { collection in
+                    if collection.id != model.selectedCollection?.id {
+                        Button(action: {
+                            model.moveCard(cardEntity, to: collection)
+                        }) {
+                            Text(collection.name)
+                        }
+                    }
+                }
+            }
+        }
+        .sheet(item: $selectedCard) { card in
+            CardDetailViewWrapper(card: card, model: model)
+        }
+    }
+    
+    // MARK: - Create Collection View
+    
+    private var createCollectionView: some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("Collection Details")) {
+                    TextField("Collection Name", text: $model.newCollectionName)
+                }
+            }
+            .navigationTitle("New Collection")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        model.showingCreateCollection = false
+                        model.newCollectionName = ""
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Create") {
+                        model.createCollection()
+                        model.showingCreateCollection = false
+                    }
+                    .disabled(model.newCollectionName.isEmpty)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Helper Views
+    
     private var loadingView: some View {
         VStack {
             ProgressView()
-                .scaleEffect(2)
                 .padding()
-            
-            Text("Loading collection...")
-                .font(.headline)
-                .padding()
+            Text("Loading your collection...")
         }
     }
     
     private func errorView(_ message: String) -> some View {
-        VStack(spacing: 20) {
+        VStack {
             Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 60))
-                .foregroundColor(.orange)
+                .font(.largeTitle)
+                .foregroundColor(.red)
+                .padding()
             
-            Text("Error")
+            Text(message)
+                .multilineTextAlignment(.center)
+                .padding()
+            
+            Button("Try Again") {
+                model.loadCollection()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+    }
+    
+    private var emptyStateView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "folder.badge.plus")
+                .font(.system(size: 70))
+                .foregroundColor(.blue)
+            
+            Text("Create Your First Collection")
                 .font(.title)
                 .fontWeight(.bold)
             
-            Text(message)
-                .font(.body)
+            Text("Start building your Pokemon card collection")
+                .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
             Button(action: {
-                model.loadCollection()
+                model.showingCreateCollection = true
             }) {
-                Text("Try Again")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(12)
+                HStack {
+                    Image(systemName: "plus")
+                    Text("Create Collection")
+                }
+                .font(.headline)
+                .foregroundColor(.white)
+                .padding()
+                .background(Color.blue)
+                .cornerRadius(12)
             }
+            .padding(.top)
         }
         .padding()
     }
     
     private var emptyCollectionView: some View {
         VStack(spacing: 20) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .font(.system(size: 60))
-                .foregroundColor(.blue)
+            Image(systemName: "rectangle.on.rectangle.slash")
+                .font(.system(size: 70))
+                .foregroundColor(.gray)
             
             Text("No Cards Yet")
                 .font(.title)
                 .fontWeight(.bold)
             
-            Text("Scan cards using the camera to add them to your collection")
-                .font(.body)
+            Text("Add cards by scanning or browsing the Pokemon TCG catalog")
+                .font(.subheadline)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
             
-            Button(action: {
-                // Navigate to scanner tab
-                if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-                   let tabBarController = windowScene.windows.first?.rootViewController as? UITabBarController {
-                    tabBarController.selectedIndex = 0 // Assuming Scanner is the first tab
+            HStack(spacing: 16) {
+                NavigationLink(destination: ScannerView(model: ScannerViewModel(persistenceManager: model.persistenceManager))) {
+                    VStack {
+                        Image(systemName: "camera")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.blue)
+                            .clipShape(Circle())
+                        
+                        Text("Scan Card")
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                    }
                 }
-            }) {
-                HStack {
-                    Image(systemName: "camera")
-                    Text("Scan Cards")
+                
+                NavigationLink(destination: BrowseView(model: BrowseViewModel(persistenceManager: model.persistenceManager))) {
+                    VStack {
+                        Image(systemName: "magnifyingglass")
+                            .font(.largeTitle)
+                            .foregroundColor(.white)
+                            .padding()
+                            .background(Color.green)
+                            .clipShape(Circle())
+                        
+                        Text("Browse")
+                            .font(.caption)
+                            .foregroundColor(.primary)
+                    }
                 }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.blue)
-                    .cornerRadius(12)
             }
+            .padding(.top)
         }
         .padding()
     }
-    
-    private var collectionGridView: some View {
-        ScrollView {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 16) {
-                ForEach(model.cards) { card in
-                    CardGridItem(card: card)
-                        .contextMenu {
-                            Button(action: {
-                                model.toggleFavorite(for: card)
-                            }) {
-                                Label(
-                                    model.cardEntities.first(where: { $0.id == card.id })?.isFavorite == true ? "Remove from Favorites" : "Add to Favorites",
-                                    systemImage: model.cardEntities.first(where: { $0.id == card.id })?.isFavorite == true ? "star.fill" : "star"
-                                )
-                            }
-                            
-                            Button(action: {
-                                model.increaseCardQuantity(with: card.id)
-                                model.loadCollection()
-                            }) {
-                                Label("Add One More", systemImage: "plus.circle")
-                            }
-                            
-                            Button(action: {
-                                model.decreaseCardQuantity(with: card.id)
-                            }) {
-                                Label("Remove One", systemImage: "minus.circle")
-                            }
-                            
-                            Button(role: .destructive, action: {
-                                model.removeCard(with: card.id)
-                            }) {
-                                Label("Remove All", systemImage: "trash")
-                            }
-                        }
-                        .onTapGesture {
-                            selectedCard = card
-                        }
-                }
-            }
-            .padding()
-            
-            // Collection summary
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Collection Summary")
-                    .font(.headline)
-                
-                HStack {
-                    VStack(alignment: .leading) {
-                        Text("Total Cards")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text("\(model.cardEntities.map { $0.quantity }.reduce(0, +))")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing) {
-                        Text("Total Value")
-                            .font(.subheadline)
-                            .foregroundColor(.secondary)
-                        Text("$\(String(format: "%.2f", model.totalCollectionValue))")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                    }
-                }
-                .padding()
-                .background(Color.blue.opacity(0.1))
-                .cornerRadius(12)
-                .padding(.horizontal)
-            }
-            .padding(.vertical)
-        }
-    }
 }
 
-struct CardGridItem: View {
-    let card: Card
-    
-    var body: some View {
-        VStack {
-            if let imageURL = URL(string: card.images.small) {
-                AsyncImage(url: imageURL) { phase in
-                    if let image = phase.image {
-                        image
-                            .resizable()
-                            .scaledToFit()
-                            .cornerRadius(8)
-                            .shadow(radius: 2)
-                    } else if phase.error != nil {
-                        Rectangle()
-                            .foregroundColor(.gray.opacity(0.2))
-                            .overlay(
-                                Image(systemName: "exclamationmark.triangle")
-                                    .foregroundColor(.red)
-                            )
-                            .cornerRadius(8)
-                    } else {
-                        Rectangle()
-                            .foregroundColor(.gray.opacity(0.2))
-                            .overlay(
-                                ProgressView()
-                            )
-                            .cornerRadius(8)
-                    }
-                }
-            }
-            
-            Text(card.name)
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .lineLimit(1)
-            
-            if let price = card.tcgplayer?.prices?.normal?.market ?? card.tcgplayer?.prices?.holofoil?.market {
-                Text("$\(String(format: "%.2f", price))")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(8)
-        .background(Color.white)
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 5, x: 0, y: 2)
-    }
-}
-
+// MARK: - Filter View
 struct FilterView: View {
-    // State for tracking selected filters
-    @State private var localSelectedTypes: [String]
-    @State private var localSelectedSets: [String]
-    
-    // Callbacks
-    let onTypeSelection: ([String]) -> Void
-    let onSetSelection: ([String]) -> Void
-    let onApply: () -> Void
-    let onReset: () -> Void
-    
-    // Sample types and sets for demo
-    let types = ["Colorless", "Darkness", "Dragon", "Fairy", "Fighting", "Fire", "Grass", "Lightning", "Metal", "Psychic", "Water"]
-    let sets = [
-        (id: "swsh1", name: "Sword & Shield"),
-        (id: "swsh2", name: "Rebel Clash"),
-        (id: "swsh3", name: "Darkness Ablaze"),
-        (id: "swsh4", name: "Vivid Voltage"),
-        (id: "swsh5", name: "Battle Styles")
-    ]
-    
-    // Initialize with current selections
-    init(selectedTypes: [String], selectedSets: [String], onTypeSelection: @escaping ([String]) -> Void, onSetSelection: @escaping ([String]) -> Void, onApply: @escaping () -> Void, onReset: @escaping () -> Void) {
-        self._localSelectedTypes = State(initialValue: selectedTypes)
-        self._localSelectedSets = State(initialValue: selectedSets)
-        self.onTypeSelection = onTypeSelection
-        self.onSetSelection = onSetSelection
-        self.onApply = onApply
-        self.onReset = onReset
-    }
+    var model: CollectionViewModel
+    @Binding var showingFilters: Bool
     
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Types")) {
+                Section(header: Text("Card Types")) {
                     ScrollView(.horizontal, showsIndicators: false) {
                         HStack {
-                            ForEach(types, id: \.self) { type in
+                            ForEach(PokemonType.allCases, id: \.self) { type in
                                 FilterChip(
-                                    title: type,
-                                    isSelected: localSelectedTypes.contains(type),
-                                    onToggle: {
-                                        if localSelectedTypes.contains(type) {
-                                            localSelectedTypes.removeAll { $0 == type }
+                                    title: type.rawValue,
+                                    isSelected: model.selectedTypes.contains(type.rawValue),
+                                    action: {
+                                        if model.selectedTypes.contains(type.rawValue) {
+                                            model.selectedTypes.removeAll { $0 == type.rawValue }
                                         } else {
-                                            localSelectedTypes.append(type)
+                                            model.selectedTypes.append(type.rawValue)
                                         }
-                                        onTypeSelection(localSelectedTypes)
+                                        model.applyFilters()
                                     }
                                 )
                             }
                         }
-                        .padding(.vertical, 4)
+                        .padding(.horizontal, 4)
                     }
+                    .padding(.vertical, 8)
                 }
                 
                 Section(header: Text("Sets")) {
-                    ForEach(sets, id: \.id) { set in
-                        Button(action: {
-                            if localSelectedSets.contains(set.id) {
-                                localSelectedSets.removeAll { $0 == set.id }
-                            } else {
-                                localSelectedSets.append(set.id)
-                            }
-                            onSetSelection(localSelectedSets)
-                        }) {
-                            HStack {
-                                Text(set.name)
-                                Spacer()
-                                if localSelectedSets.contains(set.id) {
-                                    Image(systemName: "checkmark")
-                                        .foregroundColor(.blue)
-                                }
-                            }
-                        }
-                        .foregroundColor(.primary)
+                    setsSection
+                }
+                
+                Section {
+                    Toggle("Show Favorites Only", isOn: Binding(
+                        get: { model.showFavoritesOnly },
+                        set: { model.showFavoritesOnly = $0; model.applyFilters() }
+                    ))
+                }
+                
+                Section {
+                    Button("Clear All Filters") {
+                        model.resetFilters()
                     }
                 }
             }
-            .navigationTitle("Filters")
+            .navigationTitle("Filter Cards")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Reset") {
-                        localSelectedTypes = []
-                        localSelectedSets = []
-                        onTypeSelection([])
-                        onSetSelection([])
-                        onReset()
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        showingFilters = false
                     }
-                }
-                
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Apply") {
-                        onApply()
-                    }
-                    .fontWeight(.bold)
                 }
             }
         }
     }
+    
+    private var setsSection: some View {
+        let setIDs = model.cardEntities.compactMap { $0.setID }
+        
+        // Create a unique array of set IDs
+        var uniqueSetIDs: [String] = []
+        for id in setIDs {
+            if !uniqueSetIDs.contains(id) {
+                uniqueSetIDs.append(id)
+            }
+        }
+        
+        return ScrollView(.horizontal, showsIndicators: false) {
+            HStack {
+                ForEach(uniqueSetIDs, id: \.self) { set in
+                    FilterChip(
+                        title: set,
+                        isSelected: model.selectedSets.contains(set),
+                        action: {
+                            if model.selectedSets.contains(set) {
+                                model.selectedSets.removeAll { $0 == set }
+                            } else {
+                                model.selectedSets.append(set)
+                            }
+                            model.applyFilters()
+                        }
+                    )
+                }
+            }
+            .padding(.horizontal, 4)
+        }
+        .padding(.vertical, 8)
+    }
 }
+
+// Wrapper view to simplify the CardDetailView initialization
+struct CardDetailViewWrapper: View {
+    let card: Card
+    let model: CollectionViewModel
+    
+    var body: some View {
+        CardDetailView(card: card, collection: model.selectedCollection, persistenceManager: model.persistenceManager)
+    }
+}
+
+// MARK: - Filter Chip View
 
 struct FilterChip: View {
     let title: String
     let isSelected: Bool
-    let onToggle: () -> Void
+    let action: () -> Void
     
     var body: some View {
-        Button(action: onToggle) {
+        Button(action: action) {
             Text(title)
-                .font(.subheadline)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
-                .background(isSelected ? Color.blue : Color.gray.opacity(0.2))
+                .background(
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(isSelected ? Color.blue : Color.gray.opacity(0.2))
+                )
                 .foregroundColor(isSelected ? .white : .primary)
-                .cornerRadius(16)
         }
+        .buttonStyle(.plain)
     }
+}
+
+// MARK: - Preview
+
+#Preview {
+    let pokemonTCGService = PokemonTCGService(apiKey: "your-api-key-here")
+    let modelContext = try! ModelContainer(for: CardEntity.self, CollectionEntity.self).mainContext
+    let persistenceManager = PersistenceManager(modelContext: modelContext)
+    let viewModel = CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
+    
+    return CollectionView(model: viewModel)
+}
+
+enum PokemonType: String, CaseIterable {
+    case colorless = "Colorless"
+    case darkness = "Darkness"
+    case dragon = "Dragon"
+    case fairy = "Fairy"
+    case fighting = "Fighting"
+    case fire = "Fire"
+    case grass = "Grass"
+    case lightning = "Lightning"
+    case metal = "Metal"
+    case psychic = "Psychic"
+    case water = "Water"
 } 

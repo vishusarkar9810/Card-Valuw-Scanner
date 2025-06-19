@@ -46,6 +46,16 @@ final class ScannerViewModel {
         self.persistenceManager = persistenceManager
     }
     
+    /// Convenience initializer with just persistence manager
+    /// - Parameter persistenceManager: The persistence manager to use
+    convenience init(persistenceManager: PersistenceManager) {
+        self.init(
+            cardScannerService: CardScannerService(),
+            pokemonTCGService: PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey),
+            persistenceManager: persistenceManager
+        )
+    }
+    
     // MARK: - Methods
     
     /// Update the persistence manager
@@ -840,9 +850,15 @@ final class ScannerViewModel {
             return false
         }
         
-        // Add the card to the persistent store
-        let _ = persistenceManager.addCard(card)
-        addedToCollection = true
-        return true
+        // Get the default collection
+        let collections = persistenceManager.fetchAllCollections()
+        if let defaultCollection = collections.first(where: { $0.isDefault }) ?? collections.first {
+            // Add the card to the persistent store
+            let _ = persistenceManager.addCard(card, to: defaultCollection)
+            addedToCollection = true
+            return true
+        }
+        
+        return false
     }
 } 

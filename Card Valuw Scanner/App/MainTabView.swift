@@ -8,10 +8,12 @@ struct MainTabView: View {
     private let cardScannerService: CardScannerService
     
     @Environment(\.modelContext) private var modelContext
+    @State private var selectedTab = 0
     
-    private let scannerViewModel: ScannerViewModel
-    private let collectionViewModel: CollectionViewModel
-    @State private var persistenceManager: PersistenceManager
+    // Create shared instances of view models
+    @State private var scannerViewModel: ScannerViewModel
+    @State private var collectionViewModel: CollectionViewModel
+    @State private var browseViewModel: BrowseViewModel
     
     // MARK: - Initialization
     
@@ -25,63 +27,80 @@ struct MainTabView: View {
         let tempContainer: ModelContainer
         do {
             let config = ModelConfiguration(isStoredInMemoryOnly: true)
-            tempContainer = try ModelContainer(for: CardEntity.self, configurations: config)
+            tempContainer = try ModelContainer(for: CardEntity.self, CollectionEntity.self, configurations: config)
         } catch {
             fatalError("Failed to create temporary model container: \(error)")
         }
         
         let tempPersistenceManager = PersistenceManager(modelContext: ModelContext(tempContainer))
-        self.persistenceManager = tempPersistenceManager
         
-        // Initialize view models
-        self.scannerViewModel = ScannerViewModel(
-            cardScannerService: cardScannerService, 
-            pokemonTCGService: pokemonTCGService,
-            persistenceManager: tempPersistenceManager
-        )
-        
-        self.collectionViewModel = CollectionViewModel(
-            pokemonTCGService: pokemonTCGService,
-            persistenceManager: tempPersistenceManager
-        )
+        // Initialize view models with shared persistence manager
+        _scannerViewModel = State(initialValue: ScannerViewModel(cardScannerService: cardScannerService, pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
+        _collectionViewModel = State(initialValue: CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
+        _browseViewModel = State(initialValue: BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
     }
     
     // MARK: - Body
     
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             ScannerView(model: scannerViewModel)
                 .tabItem {
                     Label("Scan", systemImage: "camera")
                 }
+                .tag(0)
+                .onChange(of: scannerViewModel.addedToCollection) { oldValue, newValue in
+                    // When a card is added to collection, ensure collection view will refresh
+                    if newValue && !oldValue {
+                        // Force a refresh when switching to collection tab
+                        collectionViewModel.shouldRefresh = true
+                    }
+                }
             
-            BrowseView(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
+            BrowseView(model: browseViewModel)
                 .tabItem {
                     Label("Browse", systemImage: "square.grid.2x2")
                 }
+                .tag(1)
             
             CollectionView(model: collectionViewModel)
                 .tabItem {
                     Label("Collection", systemImage: "folder")
+                }
+                .tag(2)
+                .onChange(of: selectedTab) { oldValue, newValue in
+                    if newValue == 2 {
+                        // Refresh collection when switching to collection tab
+                        collectionViewModel.loadCollection()
+                    }
                 }
             
             SettingsView()
                 .tabItem {
                     Label("Settings", systemImage: "gear")
                 }
+                .tag(3)
         }
         .onAppear {
             // Update the persistence manager with the injected model context
-            persistenceManager = PersistenceManager(modelContext: modelContext)
+            let persistenceManager = PersistenceManager(modelContext: modelContext)
             
             // Update view models with the new persistence manager
             scannerViewModel.updatePersistenceManager(persistenceManager)
             collectionViewModel.updatePersistenceManager(persistenceManager)
+            
+            // For browse view model, create a new instance with the correct persistence manager
+            browseViewModel = BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
+            
+            // Preload the data for collection view on app start
+            if selectedTab == 2 {
+                collectionViewModel.loadCollection()
+            }
         }
     }
 }
 
 #Preview {
     MainTabView()
-        .modelContainer(for: CardEntity.self, inMemory: true)
+        .modelContainer(for: [CardEntity.self, CollectionEntity.self], inMemory: true)
 } 

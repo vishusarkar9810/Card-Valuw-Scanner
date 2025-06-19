@@ -28,6 +28,7 @@ struct Card: Codable, Identifiable, Hashable {
     let cardmarket: CardMarket?
     let number: String?
     let set: Set?
+    let rarity: String?
     // Add other properties as needed
     
     // Hashable implementation

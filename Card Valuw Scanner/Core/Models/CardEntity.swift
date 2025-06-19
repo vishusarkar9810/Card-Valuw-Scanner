@@ -20,6 +20,10 @@ final class CardEntity {
     var isFavorite: Bool
     var quantity: Int
     
+    // Collection relationship
+    @Relationship(inverse: \CollectionEntity.cards)
+    var collections: [CollectionEntity] = []
+    
     init(
         id: String,
         name: String,
@@ -65,7 +69,7 @@ final class CardEntity {
             imageSmallURL: card.images.small,
             imageLargeURL: card.images.large,
             types: card.types ?? [],
-            rarity: nil, // Add this if available in Card model
+            rarity: card.subtypes?.first(where: { $0.contains("Rare") || $0.contains("Common") || $0.contains("Uncommon") }),
             setID: card.set?.id,
             setName: card.set?.name,
             number: card.number,
@@ -130,11 +134,17 @@ extension CardEntity {
             )
         }
         
+        // Create subtypes array with rarity if available
+        var subtypes: [String]? = nil
+        if let rarity = self.rarity {
+            subtypes = [rarity]
+        }
+        
         return Card(
             id: id,
             name: name,
             supertype: supertype,
-            subtypes: nil,
+            subtypes: subtypes,
             hp: nil,
             types: types,
             evolvesFrom: nil,
@@ -144,7 +154,8 @@ extension CardEntity {
             tcgplayer: tcgPlayer,
             cardmarket: cardmarket,
             number: number,
-            set: set
+            set: set,
+            rarity: rarity
         )
     }
 } 

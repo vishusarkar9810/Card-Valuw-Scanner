@@ -15,8 +15,8 @@ struct Card_Valuw_ScannerApp: App {
     
     init() {
         do {
-            // Create a model container for CardEntity
-            let schema = Schema([CardEntity.self])
+            // Create a model container for CardEntity and CollectionEntity
+            let schema = Schema([CardEntity.self, CollectionEntity.self])
             let modelConfiguration = ModelConfiguration(schema: schema, isStoredInMemoryOnly: false)
             self.modelContainer = try ModelContainer(for: schema, configurations: [modelConfiguration])
         } catch {
