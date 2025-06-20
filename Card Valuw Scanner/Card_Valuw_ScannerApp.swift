@@ -13,6 +13,9 @@ struct Card_Valuw_ScannerApp: App {
     // Set up the model container for SwiftData
     var modelContainer: ModelContainer
     
+    // Read dark mode preference from AppStorage
+    @AppStorage("darkMode") private var darkMode = false
+    
     init() {
         do {
             // Create a model container for CardEntity and CollectionEntity
@@ -27,6 +30,7 @@ struct Card_Valuw_ScannerApp: App {
     var body: some Scene {
         WindowGroup {
             MainTabView()
+                .preferredColorScheme(darkMode ? .dark : .light)
         }
         .modelContainer(modelContainer)
     }

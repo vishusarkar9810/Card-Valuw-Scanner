@@ -3,12 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     // MARK: - Properties
     
-    @AppStorage("username") private var username = ""
     @AppStorage("darkMode") private var darkMode = false
-    @AppStorage("notificationsEnabled") private var notificationsEnabled = true
-    @AppStorage("scanQuality") private var scanQuality = "High"
-    
-    private let scanQualityOptions = ["Low", "Medium", "High"]
     
     @State private var showingDeleteConfirmation = false
     
@@ -17,32 +12,8 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section(header: Text("Profile")) {
-                    TextField("Username", text: $username)
-                }
-                
                 Section(header: Text("Appearance")) {
                     Toggle("Dark Mode", isOn: $darkMode)
-                }
-                
-                Section(header: Text("Notifications")) {
-                    Toggle("Enable Notifications", isOn: $notificationsEnabled)
-                    
-                    if notificationsEnabled {
-                        Toggle("Price Alerts", isOn: .constant(true))
-                        Toggle("New Set Releases", isOn: .constant(true))
-                    }
-                }
-                
-                Section(header: Text("Scanner Settings")) {
-                    Picker("Scan Quality", selection: $scanQuality) {
-                        ForEach(scanQualityOptions, id: \.self) { quality in
-                            Text(quality)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    
-                    Toggle("Auto-Save Scanned Cards", isOn: .constant(true))
                 }
                 
                 Section(header: Text("About")) {
