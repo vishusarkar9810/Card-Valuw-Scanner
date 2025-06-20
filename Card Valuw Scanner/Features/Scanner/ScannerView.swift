@@ -161,7 +161,7 @@ struct ScannerView: View {
                 .font(.system(size: 80))
                 .foregroundColor(.blue)
             
-            Text("Scan a Pokemon Card")
+            Text("Scan TCG Card")
                 .font(.title)
                 .fontWeight(.bold)
             
