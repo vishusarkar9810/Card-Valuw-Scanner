@@ -81,5 +81,10 @@ struct RelatedCardItem: View {
         .background(Color.white.opacity(0.5))
         .cornerRadius(10)
         .shadow(radius: 2)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+        )
+        .contentShape(Rectangle())
     }
 } 

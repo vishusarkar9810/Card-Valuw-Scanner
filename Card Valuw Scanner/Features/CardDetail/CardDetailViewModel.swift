@@ -2,8 +2,8 @@ import Foundation
 import SwiftUI
 
 @Observable final class CardDetailViewModel {
-    private let pokemonTCGService: PokemonTCGService
-    private let persistenceManager: PersistenceManager
+    let pokemonTCGService: PokemonTCGService
+    let persistenceManager: PersistenceManager
     private let collection: CollectionEntity?
     
     let card: Card

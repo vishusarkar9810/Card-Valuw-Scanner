@@ -5,6 +5,7 @@ struct CardDetailView: View {
     @State private var viewModel: CardDetailViewModel
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
+    @State private var selectedRelatedCard: Card?
     
     init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
         self.card = card
@@ -104,7 +105,7 @@ struct CardDetailView: View {
                 // Related cards
                 if !viewModel.relatedCards.isEmpty {
                     RelatedCardsView(cards: viewModel.relatedCards) { selectedCard in
-                        // Handle card selection
+                        self.selectedRelatedCard = selectedCard
                     }
                 } else if viewModel.isLoading {
                     VStack {
@@ -173,6 +174,22 @@ struct CardDetailView: View {
         .task {
             await viewModel.fetchRelatedCards()
             await viewModel.fetchPriceHistory()
+        }
+        .sheet(item: $selectedRelatedCard) { relatedCard in
+            NavigationStack {
+                CardDetailView(
+                    card: relatedCard,
+                    pokemonTCGService: viewModel.pokemonTCGService,
+                    persistenceManager: viewModel.persistenceManager
+                )
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("Close") {
+                            selectedRelatedCard = nil
+                        }
+                    }
+                }
+            }
         }
     }
     
