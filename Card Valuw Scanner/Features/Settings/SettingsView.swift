@@ -45,6 +45,14 @@ struct SettingsView: View {
                     }
                     .foregroundColor(.red)
                 }
+                
+                Section {
+                    Text("Pokémon, the Poké Ball and Pokémon Trading Cards are registered trademarks of Nintendo Creatures Game Freak. All rights to their respective copyright holders. This app is not affiliated with, sponsored or endorsed by, or in any way associated with The Pokemon Company International inc. / Nintendo/ Creatures Inc. / GAME FREAK inc")
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.vertical, 8)
+                }
             }
             .navigationTitle("Settings")
             .alert("Delete All Data", isPresented: $showingDeleteConfirmation) {
