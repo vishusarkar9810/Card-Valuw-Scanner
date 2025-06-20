@@ -105,8 +105,6 @@ struct CardScannerCameraView_Impl: View {
     @State private var sourceType: UIImagePickerController.SourceType = .camera
     @State private var showingTips: Bool = true
     @State private var tipIndex: Int = 0
-    @State private var showingFlashlight: Bool = false
-    @State private var isFlashlightOn: Bool = false
     
     // Tips for better card scanning
     private let scanningTips = [
@@ -124,10 +122,9 @@ struct CardScannerCameraView_Impl: View {
                 CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
                     .overlay(cameraOverlay)
                     .overlay(tipsOverlay, alignment: .top)
-                    .overlay(controlsOverlay, alignment: .bottom)
             } else {
                 // Photo library view doesn't need the overlay
-            CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
+                CameraView(capturedImage: $capturedImage, isPresented: $isPresented)
             }
         }
         .onAppear {
@@ -136,11 +133,6 @@ struct CardScannerCameraView_Impl: View {
                 sourceType = .camera
                 // Start the tip rotation timer
                 startTipRotation()
-                
-                // Check if flashlight is available
-                if let device = AVCaptureDevice.default(for: .video), device.hasTorch {
-                    showingFlashlight = true
-                }
             } else {
                 sourceType = .photoLibrary
             }
@@ -198,7 +190,7 @@ struct CardScannerCameraView_Impl: View {
                         .offset(x: 150, y: 210)
                         
                         // Target areas for important card information
-            VStack {
+                        VStack {
                             // Card name area
                             RoundedRectangle(cornerRadius: 4)
                                 .stroke(Color.yellow, lineWidth: 2)
@@ -239,10 +231,7 @@ struct CardScannerCameraView_Impl: View {
                         )
                 )
             
-                Spacer()
-                
-            // Add space at the bottom to avoid overlapping with system UI
-            Spacer().frame(height: 100)
+            Spacer()
         }
     }
     
@@ -265,39 +254,6 @@ struct CardScannerCameraView_Impl: View {
         }
     }
     
-    // Controls overlay at the bottom of the screen
-    private var controlsOverlay: some View {
-        HStack {
-            // Cancel button
-            Button(action: {
-                isPresented = false
-            }) {
-                Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 30))
-                    .foregroundColor(.white)
-                    .padding()
-                    .background(Color.black.opacity(0.5))
-                    .clipShape(Circle())
-            }
-                
-                Spacer()
-                
-            // Flashlight toggle button (only if available)
-            if showingFlashlight {
-                Button(action: toggleFlashlight) {
-                    Image(systemName: isFlashlightOn ? "bolt.fill" : "bolt.slash.fill")
-                        .font(.system(size: 30))
-                        .foregroundColor(.white)
-                        .padding()
-                        .background(Color.black.opacity(0.5))
-                        .clipShape(Circle())
-                }
-            }
-        }
-        .padding(.horizontal, 30)
-        .padding(.bottom, 40)
-    }
-    
     // Start rotating through tips
     private func startTipRotation() {
         // Create a timer that changes the tip every 3 seconds
@@ -305,26 +261,6 @@ struct CardScannerCameraView_Impl: View {
             withAnimation(.easeInOut) {
                 tipIndex = (tipIndex + 1) % scanningTips.count
             }
-        }
-    }
-    
-    // Toggle device flashlight
-    private func toggleFlashlight() {
-        guard let device = AVCaptureDevice.default(for: .video), device.hasTorch else { return }
-        
-        do {
-            try device.lockForConfiguration()
-            
-            if isFlashlightOn {
-                device.torchMode = .off
-            } else {
-                try device.setTorchModeOn(level: 0.7) // Set to 70% brightness
-            }
-            
-            isFlashlightOn.toggle()
-            device.unlockForConfiguration()
-        } catch {
-            print("Error toggling flashlight: \(error.localizedDescription)")
         }
     }
 } 
