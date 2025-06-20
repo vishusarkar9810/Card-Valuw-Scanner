@@ -8,8 +8,10 @@ struct MarketplaceDealsView: View {
             HStack {
                 Image(systemName: "cart")
                     .font(.title3)
+                    .foregroundColor(.primary)
                 Text("Deals on marketplaces")
                     .font(.headline)
+                    .foregroundColor(.primary)
                 Spacer()
             }
             .padding(.bottom, 4)
@@ -40,7 +42,7 @@ struct MarketplaceDealsView: View {
         .background(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.red.opacity(0.3), lineWidth: 1.5)
-                .background(Color.white)
+                .background(Color(.systemBackground))
         )
         .cornerRadius(12)
     }
@@ -73,6 +75,7 @@ struct MarketplaceDealsView: View {
                 
                 Text(title)
                     .font(.headline)
+                    .foregroundColor(.primary)
                 
                 // Show "N/A" if price is 0
                 Text(price > 0 ? "from $\(String(format: "%.2f", price))" : "Price not available")
@@ -81,7 +84,7 @@ struct MarketplaceDealsView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
-            .background(Color.gray.opacity(0.05))
+            .background(Color(.secondarySystemBackground))
             .cornerRadius(8)
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
