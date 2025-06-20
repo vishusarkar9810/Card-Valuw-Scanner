@@ -11,6 +11,8 @@ struct CollectionView: View {
     @State private var selectedCard: Card? = nil
     @State private var searchText: String = ""
     @State private var showingCollectionsList = true
+    @State private var collectionToRename: CollectionEntity? = nil
+    @State private var newCollectionName: String = ""
     
     // MARK: - State properties
     @State private var showingSortOptions = false
@@ -49,6 +51,9 @@ struct CollectionView: View {
             }
             .sheet(isPresented: $model.showingCreateCollection) {
                 createCollectionView
+            }
+            .sheet(item: $collectionToRename) { collection in
+                renameCollectionView(collection)
             }
             .onAppear {
                 if model.shouldRefresh {
@@ -166,6 +171,22 @@ struct CollectionView: View {
                 Text("\(collection.cardCount) cards")
                     .font(.caption)
                     .foregroundColor(.secondary)
+            }
+        }
+        .contextMenu {
+            if !collection.isDefault {
+                Button(role: .destructive, action: {
+                    model.deleteCollection(collection)
+                }) {
+                    Label("Delete Collection", systemImage: "trash")
+                }
+            }
+            
+            Button(action: {
+                collectionToRename = collection
+                newCollectionName = collection.name
+            }) {
+                Label("Rename", systemImage: "pencil")
             }
         }
     }
@@ -382,6 +403,41 @@ struct CollectionView: View {
                         model.showingCreateCollection = false
                     }
                     .disabled(model.newCollectionName.isEmpty)
+                }
+            }
+        }
+    }
+    
+    // MARK: - Rename Collection View
+    
+    private func renameCollectionView(_ collection: CollectionEntity) -> some View {
+        NavigationStack {
+            Form {
+                Section(header: Text("Collection Details")) {
+                    TextField("Collection Name", text: $newCollectionName)
+                }
+            }
+            .navigationTitle("Rename Collection")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("Cancel") {
+                        collectionToRename = nil
+                        newCollectionName = ""
+                    }
+                }
+                
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Save") {
+                        if !newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            collection.name = newCollectionName
+                            model.persistenceManager.updateCollection(collection)
+                            model.loadCollections()
+                        }
+                        collectionToRename = nil
+                        newCollectionName = ""
+                    }
+                    .disabled(newCollectionName.isEmpty)
                 }
             }
         }

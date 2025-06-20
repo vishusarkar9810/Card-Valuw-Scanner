@@ -3,7 +3,7 @@ import SwiftUI
 import SwiftData
 
 @Model
-final class CollectionEntity {
+final class CollectionEntity: Identifiable {
     var id: UUID
     var name: String
     var imageURL: String?
