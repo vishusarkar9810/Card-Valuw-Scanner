@@ -464,39 +464,6 @@ struct CollectionView: View {
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-            
-            HStack(spacing: 16) {
-                NavigationLink(destination: ScannerView(model: ScannerViewModel(persistenceManager: model.persistenceManager))) {
-                    VStack {
-                        Image(systemName: "camera")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.blue)
-                            .clipShape(Circle())
-                        
-                        Text("Scan Card")
-                            .font(.caption)
-                            .foregroundColor(.primary)
-                    }
-                }
-                
-                NavigationLink(destination: BrowseView(model: BrowseViewModel(persistenceManager: model.persistenceManager))) {
-                    VStack {
-                        Image(systemName: "magnifyingglass")
-                            .font(.largeTitle)
-                            .foregroundColor(.white)
-                            .padding()
-                            .background(Color.green)
-                            .clipShape(Circle())
-                        
-                        Text("Browse")
-                            .font(.caption)
-                            .foregroundColor(.primary)
-                    }
-                }
-            }
-            .padding(.top)
         }
         .padding()
     }
