@@ -9,11 +9,15 @@ This document outlines the subscription implementation for the Pokemon Card Valu
    - Transaction handling and verification
    - Subscription status tracking
    - Premium feature access control
+   - Raw price access for calculations
+   - Currency symbol extraction and formatting
 
 2. **SubscriptionViewModel.swift** - Updated to use SubscriptionService:
    - Provides UI-friendly properties and methods
    - Handles user interactions with subscription options
    - Delegates actual purchase operations to SubscriptionService
+   - Dynamically calculates original price and savings percentage
+   - Uses locale-appropriate currency symbols
 
 3. **SubscriptionView.swift** - Updated to work with async operations:
    - Displays subscription options
@@ -57,6 +61,13 @@ The following features are now gated behind the premium subscription:
 - Handles transaction verification
 - Provides real-time subscription status updates
 - Supports restore purchases functionality
+
+### Subscription Pricing
+
+- Original yearly price is dynamically calculated based on weekly subscription price × 52 weeks
+- Savings percentage is dynamically calculated by comparing yearly price to the annualized weekly price
+- Currency symbols are extracted from product price displays to ensure locale-appropriate formatting
+- Proper currency formatting is applied to all prices, respecting the user's region
 
 ### Premium Feature Access Control
 

@@ -42,9 +42,35 @@ import Observation
         subscriptionService.formattedPrice(for: subscriptionService.yearlySubscription)
     }
     
-    // Hard-coded values for UI display (these would ideally come from the server)
-    let yearlyPlanOriginalPrice = "₹41,548.00"
-    let yearlyPlanSavings = "93%"
+    // Calculate original price based on weekly subscription price * 52 weeks
+    var yearlyPlanOriginalPrice: String {
+        guard let weeklyPrice = subscriptionService.rawPrice(for: subscriptionService.trialSubscription) else {
+            return "N/A"
+        }
+        
+        // Calculate what it would cost to pay weekly for a year
+        let annualCost = weeklyPrice * 52
+        
+        // Use the formatPrice method to ensure consistent currency formatting
+        return subscriptionService.formatPrice(annualCost, using: subscriptionService.trialSubscription)
+    }
+    
+    // Calculate savings percentage dynamically
+    var yearlyPlanSavings: String {
+        guard let yearlyPrice = subscriptionService.rawPrice(for: subscriptionService.yearlySubscription),
+              let weeklyPrice = subscriptionService.rawPrice(for: subscriptionService.trialSubscription) else {
+            return "N/A"
+        }
+        
+        let annualCostIfWeekly = weeklyPrice * 52
+        let savings = (annualCostIfWeekly - yearlyPrice) / annualCostIfWeekly * 100
+        
+        // Convert to Double for rounding, then to Int
+        let savingsDouble = NSDecimalNumber(decimal: savings).doubleValue
+        let roundedSavings = Int(savingsDouble.rounded())
+        
+        return "\(roundedSavings)%"
+    }
     
     var trialPrice: String {
         subscriptionService.formattedPrice(for: subscriptionService.trialSubscription)

@@ -213,6 +213,31 @@ import SwiftUI
         return product.displayPrice
     }
     
+    func rawPrice(for product: Product?) -> Decimal? {
+        guard let product = product else { return nil }
+        return product.price
+    }
+    
+    func currencySymbol(for product: Product?) -> String {
+        guard let product = product else {
+            // Default to user's locale currency symbol if product is not available
+            return Locale.current.currencySymbol ?? "$"
+        }
+        
+        // Extract currency symbol from the product's formatted price
+        // This ensures we use the same currency symbol as shown in the App Store
+        let priceString = product.displayPrice
+        
+        // Find the first character that's not a digit, space, or period
+        // This is likely the currency symbol
+        if let currencySymbol = priceString.first(where: { !$0.isNumber && $0 != "." && $0 != " " && $0 != "," }) {
+            return String(currencySymbol)
+        }
+        
+        // Fallback to user's locale currency symbol
+        return Locale.current.currencySymbol ?? "$"
+    }
+    
     func formattedSubscriptionPeriod(for product: Product?) -> String {
         guard let product = product,
               let subscription = product.subscription else {
@@ -241,6 +266,28 @@ import SwiftUI
     
     func hasActiveSubscription() -> Bool {
         return isPremium
+    }
+    
+    func formatPrice(_ price: Decimal, using referenceProduct: Product?) -> String {
+        guard let product = referenceProduct else {
+            // Default formatting if no product is available
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .currency
+            formatter.currencySymbol = Locale.current.currencySymbol ?? "$"
+            formatter.maximumFractionDigits = 2
+            return formatter.string(from: NSDecimalNumber(decimal: price)) ?? "N/A"
+        }
+        
+        // Get the currency symbol from the product
+        let currencySymbol = self.currencySymbol(for: product)
+        
+        // Format as currency
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .currency
+        formatter.currencySymbol = currencySymbol
+        formatter.maximumFractionDigits = 2
+        
+        return formatter.string(from: NSDecimalNumber(decimal: price)) ?? "N/A"
     }
 }
 
