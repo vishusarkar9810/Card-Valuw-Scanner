@@ -5,9 +5,23 @@ class SubscriptionViewModel: ObservableObject {
     // MARK: - Properties
     
     @Published var isPremium = false
-    @Published var isTrialEnabled = false
+    @Published var isTrialEnabled = false {
+        didSet {
+            // Keep the selected plan in sync with the trial toggle
+            if isTrialEnabled && selectedPlan != .trial {
+                selectedPlan = .trial
+            } else if !isTrialEnabled && selectedPlan != .yearly {
+                selectedPlan = .yearly
+            }
+        }
+    }
     @Published var isLoading = false
-    @Published var selectedPlan: SubscriptionPlan = .yearly
+    @Published var selectedPlan: SubscriptionPlan = .yearly {
+        didSet {
+            // Keep the trial toggle in sync with the selected plan
+            isTrialEnabled = (selectedPlan == .trial)
+        }
+    }
     
     // Subscription options
     let yearlyPlanPrice = "₹2,499.00"

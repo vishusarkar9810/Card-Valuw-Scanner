@@ -54,6 +54,7 @@ struct SubscriptionView: View {
                             VStack(spacing: 0) {
                                 Button(action: {
                                     viewModel.selectPlan(.yearly)
+                                    viewModel.isTrialEnabled = false
                                 }) {
                                     HStack {
                                         VStack(alignment: .leading) {
@@ -116,6 +117,7 @@ struct SubscriptionView: View {
                         VStack(spacing: 0) {
                             Button(action: {
                                 viewModel.selectPlan(.trial)
+                                viewModel.isTrialEnabled = true
                             }) {
                                 HStack {
                                     VStack(alignment: .leading) {
@@ -179,6 +181,8 @@ struct SubscriptionView: View {
                                 .onChange(of: viewModel.isTrialEnabled) { newValue in
                                     if newValue {
                                         viewModel.selectPlan(.trial)
+                                    } else {
+                                        viewModel.selectPlan(.yearly)
                                     }
                                 }
                         }
@@ -233,6 +237,10 @@ struct SubscriptionView: View {
                 }
             }
             .edgesIgnoringSafeArea(.all)
+            .onAppear {
+                // Ensure toggle and selected plan are in sync when view appears
+                viewModel.isTrialEnabled = (viewModel.selectedPlan == .trial)
+            }
             
             // Close button (top right)
             VStack {
