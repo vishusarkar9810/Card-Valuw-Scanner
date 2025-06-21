@@ -266,4 +266,22 @@ final class PersistenceManager {
             logger.error("Failed to save changes: \(error.localizedDescription)")
         }
     }
+    
+    // MARK: - Static Properties
+    
+    /// A shared instance for previews
+    @MainActor
+    static var preview: PersistenceManager {
+        let modelContainer = try! ModelContainer(for: CardEntity.self, CollectionEntity.self)
+        let manager = PersistenceManager(modelContext: modelContainer.mainContext)
+        return manager
+    }
+    
+    /// A shared instance for the app
+    @MainActor
+    static var shared: PersistenceManager {
+        let modelContainer = try! ModelContainer(for: CardEntity.self, CollectionEntity.self)
+        let manager = PersistenceManager(modelContext: modelContainer.mainContext)
+        return manager
+    }
 } 

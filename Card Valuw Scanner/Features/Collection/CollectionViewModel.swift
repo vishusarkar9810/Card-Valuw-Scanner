@@ -6,8 +6,9 @@ import OSLog
 @Observable
 final class CollectionViewModel {
     private let logger = Logger(subsystem: "com.app.cardvaluescanner", category: "CollectionViewModel")
-    private let pokemonTCGService: PokemonTCGService
+    let pokemonTCGService: PokemonTCGService
     var persistenceManager: PersistenceManager
+    private var subscriptionService: SubscriptionService
     
     // MARK: - Published properties
     
@@ -19,7 +20,7 @@ final class CollectionViewModel {
     var errorMessage: String?
     var showingCreateCollection = false
     var newCollectionName = ""
-    var shouldRefresh = false
+    var shouldRefresh = true
     var totalCollectionValue: Double = 0.0
     var displayedCollectionValue: Double = 0.0
     
@@ -48,9 +49,10 @@ final class CollectionViewModel {
     
     // MARK: - Initialization
     
-    init(pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
+    init(pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager, subscriptionService: SubscriptionService) {
         self.pokemonTCGService = pokemonTCGService
         self.persistenceManager = persistenceManager
+        self.subscriptionService = subscriptionService
         self.totalCollectionValue = 0.0
         self.displayedCollectionValue = 0.0
         loadCollections()
@@ -80,81 +82,89 @@ final class CollectionViewModel {
     
     /// Create a new collection
     func createCollection() {
-        guard !newCollectionName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard !newCollectionName.isEmpty else {
+            errorMessage = "Collection name cannot be empty"
             return
         }
         
-        let collection = persistenceManager.createCollection(name: newCollectionName)
-        collections.append(collection)
-        newCollectionName = ""
-        showingCreateCollection = false
+        // Check if user can create more collections
+        if !canCreateMoreCollections() {
+            errorMessage = "Upgrade to Premium to create more collections"
+            return
+        }
+        
+        do {
+            let newCollection = persistenceManager.createCollection(name: newCollectionName)
+            collections.append(newCollection)
+            newCollectionName = ""
+            showingCreateCollection = false
+            selectCollection(newCollection)
+        } catch {
+            errorMessage = "Failed to create collection: \(error.localizedDescription)"
+        }
     }
     
     /// Delete a collection
     func deleteCollection(_ collection: CollectionEntity) {
-        persistenceManager.deleteCollection(collection)
-        collections.removeAll { $0.id == collection.id }
+        guard !collection.isDefault else {
+            errorMessage = "Cannot delete the default collection"
+            return
+        }
         
-        // If the deleted collection was the selected one, select another one
-        if selectedCollection?.id == collection.id {
-            selectedCollection = collections.first(where: { $0.isDefault }) ?? collections.first
-            loadCollection()
+        do {
+            persistenceManager.deleteCollection(collection)
+            
+            // Update collections list
+            collections = persistenceManager.fetchAllCollections()
+            
+            // If the deleted collection was selected, select another one
+            if selectedCollection?.id == collection.id {
+                if let defaultCollection = collections.first(where: { $0.isDefault }) {
+                    selectCollection(defaultCollection)
+                } else if let firstCollection = collections.first {
+                    selectCollection(firstCollection)
+                } else {
+                    selectedCollection = nil
+                    cardEntities = []
+                    filteredCards = []
+                }
+            }
+        } catch {
+            errorMessage = "Failed to delete collection: \(error.localizedDescription)"
         }
     }
     
     /// Select a collection
     func selectCollection(_ collection: CollectionEntity) {
         selectedCollection = collection
-        loadCollection()
+        cardEntities = Array(collection.cards)
+        applyFilters()
     }
     
     /// Load the user's collection from persistent storage
     func loadCollection() {
         isLoading = true
         errorMessage = nil
-        shouldRefresh = false
         
-        guard let collection = selectedCollection else {
-            isLoading = false
-            cards = []
-            cardEntities = []
-            totalCollectionValue = 0.0
-            displayedCollectionValue = 0.0
-            return
-        }
-        
-        cardEntities = collection.cards.sorted(by: { $0.dateAdded > $1.dateAdded })
-        
-        // Convert CardEntity objects to Card objects
-        let cardIds = cardEntities.map { $0.id }
-        
-        Task {
-            do {
-                var fetchedCards: [Card] = []
-                
-                // Fetch cards one by one since the API doesn't support bulk fetching by IDs
-                for cardId in cardIds {
-                    do {
-                        let cardResponse = try await pokemonTCGService.getCard(id: cardId)
-                        fetchedCards.append(cardResponse.data)
-                    } catch {
-                        logger.error("Failed to fetch card \(cardId): \(error.localizedDescription)")
-                    }
-                }
-                
-                // Update on main thread
-                await MainActor.run {
-                    self.cards = fetchedCards
-                    self.isLoading = false
-                    self.applyFilters()
-                    self.calculateTotalCollectionValue()
-                }
-            } catch {
-                await MainActor.run {
-                    self.errorMessage = "Failed to load collection: \(error.localizedDescription)"
-                    self.isLoading = false
-                }
+        do {
+            // Load all collections
+            collections = persistenceManager.fetchAllCollections()
+            
+            // Select the default collection if available
+            if let defaultCollection = collections.first(where: { $0.isDefault }) {
+                selectCollection(defaultCollection)
+            } else if let firstCollection = collections.first {
+                selectCollection(firstCollection)
+            } else {
+                // Create a default collection if none exists
+                createDefaultCollection()
             }
+            
+            isLoading = false
+            shouldRefresh = false
+        } catch {
+            errorMessage = "Failed to load collections: \(error.localizedDescription)"
+            isLoading = false
         }
     }
     
@@ -374,5 +384,24 @@ final class CollectionViewModel {
         persistenceManager.moveCard(card, from: sourceCollection, to: destinationCollection)
         loadCollection()
         calculateTotalCollectionValue()
+    }
+    
+    // MARK: - Premium Features
+    
+    func canCreateMoreCollections() -> Bool {
+        // If user is premium, they can create unlimited collections
+        if subscriptionService.canAccessPremiumFeature(.unlimitedCollections) {
+            return true
+        }
+        
+        // Free tier users can only create 1 collection
+        return collections.count < 1
+    }
+    
+    private func createDefaultCollection() {
+        let defaultCollection = persistenceManager.createCollection(name: "My Collection")
+        defaultCollection.isDefault = true
+        collections = [defaultCollection]
+        selectCollection(defaultCollection)
     }
 } 

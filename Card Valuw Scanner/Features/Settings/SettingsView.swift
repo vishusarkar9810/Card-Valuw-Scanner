@@ -3,12 +3,12 @@ import SwiftUI
 struct SettingsView: View {
     // MARK: - Properties
     
+    @Environment(\.subscriptionService) private var subscriptionService
     @AppStorage("darkMode") private var darkMode = false
-    @StateObject private var subscriptionViewModel = SubscriptionViewModel()
+    @State private var showingSubscriptions = false
     
     @State private var showPrivacyPolicy = false
     @State private var showTermsOfService = false
-    @State private var showSubscriptions = false
     
     // MARK: - Body
     
@@ -17,19 +17,19 @@ struct SettingsView: View {
             Form {
                 Section(header: Text("Premium")) {
                     Button {
-                        showSubscriptions = true
+                        showingSubscriptions = true
                     } label: {
                         HStack {
-                            Image(systemName: subscriptionViewModel.isPremium ? "star.fill" : "star")
+                            Image(systemName: subscriptionService.isPremium ? "star.fill" : "star")
                                 .foregroundColor(.yellow)
-                            Text(subscriptionViewModel.isPremium ? "Premium Active" : "Upgrade to Premium")
+                            Text(subscriptionService.isPremium ? "Premium Active" : "Upgrade to Premium")
                             Spacer()
                             Image(systemName: "chevron.right")
                                 .foregroundColor(.secondary)
                                 .font(.caption)
                         }
                     }
-                    .disabled(subscriptionViewModel.isPremium)
+                    .disabled(subscriptionService.isPremium)
                 }
                 
                 Section(header: Text("Appearance")) {
@@ -69,10 +69,16 @@ struct SettingsView: View {
             .sheet(isPresented: $showTermsOfService) {
                 TermsOfServiceView(isPresented: $showTermsOfService)
             }
-            .fullScreenCover(isPresented: $showSubscriptions, content: {
-                SubscriptionView(viewModel: subscriptionViewModel, isPresented: $showSubscriptions)
+            .fullScreenCover(isPresented: $showingSubscriptions, content: {
+                SubscriptionView(viewModel: SubscriptionViewModel(subscriptionService: subscriptionService), isPresented: $showingSubscriptions)
                     .ignoresSafeArea()
             })
+            .onAppear {
+                // Update subscription status when view appears
+                Task {
+                    await subscriptionService.updateSubscriptionStatus()
+                }
+            }
         }
     }
 }

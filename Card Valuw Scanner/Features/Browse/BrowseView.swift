@@ -40,11 +40,8 @@ struct BrowseView: View {
                 }
             }
             .navigationDestination(item: $selectedCard) { card in
-                CardDetailView(
-                    card: card,
-                    pokemonTCGService: viewModel.pokemonTCGService,
-                    persistenceManager: viewModel.persistenceManager
-                )
+                let detailViewModel = CardDetailViewModel(card: card, pokemonTCGService: viewModel.pokemonTCGService, persistenceManager: viewModel.persistenceManager, collection: nil)
+                CardDetailView(model: detailViewModel)
             }
             .toolbar {
                 if selectedSet != nil {
@@ -326,7 +323,7 @@ struct BrowseView_Previews: PreviewProvider {
         let container = try! ModelContainer(for: CardEntity.self, configurations: config)
         
         let persistenceManager = PersistenceManager(modelContext: ModelContext(container))
-        let pokemonTCGService = PokemonTCGService(apiKey: "your-api-key")
+        let pokemonTCGService = PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey)
         let viewModel = BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
         
         return BrowseView(model: viewModel)

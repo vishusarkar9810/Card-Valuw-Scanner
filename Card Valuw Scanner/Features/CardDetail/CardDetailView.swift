@@ -1,30 +1,27 @@
 import SwiftUI
 
 struct CardDetailView: View {
-    let card: Card
-    @State private var viewModel: CardDetailViewModel
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    @Environment(\.dismiss) private var dismiss
-    @State private var selectedRelatedCard: Card?
+    // MARK: - Properties
     
-    init(card: Card, pokemonTCGService: PokemonTCGService, persistenceManager: PersistenceManager) {
-        self.card = card
-        self._viewModel = State(initialValue: CardDetailViewModel(
-            card: card,
-            pokemonTCGService: pokemonTCGService,
-            persistenceManager: persistenceManager
-        ))
+    @State private var model: CardDetailViewModel
+    @State private var selectedRelatedCard: Card? = nil
+    @State private var showingShareSheet = false
+    @State private var showSubscriptions = false
+    @Environment(\.subscriptionService) private var subscriptionService
+    
+    // MARK: - Initialization
+    
+    init(model: CardDetailViewModel) {
+        self._model = State(initialValue: model)
     }
     
-    init(card: Card, collection: CollectionEntity?, persistenceManager: PersistenceManager) {
-        self.card = card
-        self._viewModel = State(initialValue: CardDetailViewModel(
-            card: card,
-            pokemonTCGService: PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey),
-            persistenceManager: persistenceManager,
-            collection: collection
-        ))
+    // MARK: - Computed Properties
+    
+    private var card: Card {
+        model.card
     }
+    
+    // MARK: - Body
     
     var body: some View {
         ScrollView {
@@ -70,44 +67,54 @@ struct CardDetailView: View {
                 
                 Divider()
                 
-                // Price history chart
-                if !viewModel.priceHistory.isEmpty {
-                    PriceHistoryChart(priceHistory: viewModel.priceHistory)
-                        .redacted(reason: viewModel.isPriceHistoryLoading ? .placeholder : [])
-                        .overlay {
-                            if viewModel.isPriceHistoryLoading {
-                                ProgressView()
+                // Price history chart (Premium feature)
+                if subscriptionService.canAccessPremiumFeature(.marketAnalysis) {
+                    if !model.priceHistory.isEmpty {
+                        PriceHistoryChart(priceHistory: model.priceHistory)
+                            .redacted(reason: model.isPriceHistoryLoading ? .placeholder : [])
+                            .overlay {
+                                if model.isPriceHistoryLoading {
+                                    ProgressView()
+                                }
                             }
+                    } else if model.isPriceHistoryLoading {
+                        VStack {
+                            Text("Loading price history...")
+                                .font(.caption)
+                            ProgressView()
                         }
-                } else if viewModel.isPriceHistoryLoading {
-                    VStack {
-                        Text("Loading price history...")
-                            .font(.caption)
-                        ProgressView()
-                    }
-                    .frame(maxWidth: .infinity, alignment: .center)
-                    .padding()
-                } else {
-                    Text("No price history available")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
+                    } else {
+                        Text("No price history available")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .center)
+                            .padding()
+                    }
+                } else {
+                    // Premium feature locked UI
+                    premiumFeatureLockedView(feature: .marketAnalysis)
                 }
                 
                 Divider()
                 
-                // Marketplace deals section
-                MarketplaceDealsView(card: card)
+                // Marketplace deals section (Premium feature)
+                if subscriptionService.canAccessPremiumFeature(.livePrices) {
+                    MarketplaceDealsView(card: card)
+                } else {
+                    // Premium feature locked UI
+                    premiumFeatureLockedView(feature: .livePrices)
+                }
                 
                 Divider()
                 
                 // Related cards
-                if !viewModel.relatedCards.isEmpty {
-                    RelatedCardsView(cards: viewModel.relatedCards) { selectedCard in
+                if !model.relatedCards.isEmpty {
+                    RelatedCardsView(cards: model.relatedCards) { selectedCard in
                         self.selectedRelatedCard = selectedCard
                     }
-                } else if viewModel.isLoading {
+                } else if model.isLoading {
                     VStack {
                         Text("Loading related cards...")
                             .font(.caption)
@@ -122,144 +129,118 @@ struct CardDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .padding()
                 }
-                
-                Divider()
-                
-                // Card details
-                Group {
-                    detailRow(label: "Type", value: card.supertype)
-                    
-                    if let hp = card.hp {
-                        detailRow(label: "HP", value: hp)
-                    }
-                    
-                    if let types = card.types, !types.isEmpty {
-                        detailRow(label: "Types", value: types.joined(separator: ", "))
-                    }
-                    
-                    if let rules = card.rules, !rules.isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Rules")
-                                .font(.headline)
-                            ForEach(rules, id: \.self) { rule in
-                                Text(rule)
-                                    .font(.body)
-                                    .padding(.vertical, 2)
-                            }
-                        }
-                    }
-                }
             }
             .padding()
         }
+        .navigationTitle("Card Details")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    viewModel.toggleFavorite()
-                } label: {
-                    Image(systemName: viewModel.isFavorite ? "heart.fill" : "heart")
-                        .foregroundColor(viewModel.isFavorite ? .red : nil)
+                Button(action: {
+                    showingShareSheet = true
+                }) {
+                    Image(systemName: "square.and.arrow.up")
                 }
             }
             
             ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                    shareCard()
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
+                Button(action: {
+                    model.toggleFavorite()
+                }) {
+                    Image(systemName: model.isFavorite ? "heart.fill" : "heart")
+                        .foregroundColor(model.isFavorite ? .red : .primary)
                 }
             }
+        }
+        .sheet(isPresented: $showingShareSheet) {
+            let shareData = model.shareCard()
+            ActivityViewControllerWrapper(activityItems: shareData.activityItems, applicationActivities: shareData.applicationActivities)
+        }
+        .sheet(item: $selectedRelatedCard) { card in
+            NavigationStack {
+                CardDetailView(model: CardDetailViewModel(card: card, pokemonTCGService: model.pokemonTCGService, persistenceManager: model.persistenceManager, collection: nil))
+            }
+        }
+        .sheet(isPresented: $showSubscriptions) {
+            SubscriptionView(viewModel: SubscriptionViewModel(subscriptionService: subscriptionService), isPresented: $showSubscriptions)
         }
         .task {
-            await viewModel.fetchRelatedCards()
-            await viewModel.fetchPriceHistory()
-        }
-        .sheet(item: $selectedRelatedCard) { relatedCard in
-            NavigationStack {
-                CardDetailView(
-                    card: relatedCard,
-                    pokemonTCGService: viewModel.pokemonTCGService,
-                    persistenceManager: viewModel.persistenceManager
-                )
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button("Close") {
-                            selectedRelatedCard = nil
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    private func detailRow(label: String, value: String) -> some View {
-        HStack(alignment: .top) {
-            Text(label)
-                .font(.headline)
-                .frame(width: 80, alignment: .leading)
-            Text(value)
-                .font(.body)
-        }
-        .padding(.vertical, 2)
-    }
-    
-    private func priceRow(label: String, value: Double) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .frame(width: 80, alignment: .leading)
-            Text("$\(String(format: "%.2f", value))")
-                .font(.subheadline)
-                .fontWeight(.medium)
-        }
-        .padding(.vertical, 1)
-    }
-    
-    private func priceSection(title: String, prices: PriceDetails) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.headline)
-                .padding(.bottom, 2)
+            await model.fetchRelatedCards()
+            await model.fetchPriceHistory()
             
-            if let low = prices.low {
-                priceRow(label: "Low", value: low)
-            }
-            if let mid = prices.mid {
-                priceRow(label: "Mid", value: mid)
-            }
-            if let high = prices.high {
-                priceRow(label: "High", value: high)
-            }
-            if let market = prices.market {
-                priceRow(label: "Market", value: market)
-            }
+            // Update subscription status
+            await subscriptionService.updateSubscriptionStatus()
         }
     }
     
-    private func shareCard() {
-        // Create items to share
-        var items: [Any] = []
-        
-        // Add card name and set
-        var shareText = "Check out this Pokémon card: \(card.name)"
-        if let set = card.set {
-            shareText += " from \(set.name)"
+    // MARK: - Helper Views
+    
+    @ViewBuilder
+    private func premiumFeatureLockedView(feature: PremiumFeature) -> some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: feature.iconName)
+                    .font(.title3)
+                    .foregroundColor(.primary)
+                Text(feature.description)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            
+            VStack(spacing: 12) {
+                Image(systemName: "lock.fill")
+                    .font(.largeTitle)
+                    .foregroundColor(.secondary)
+                
+                Text("Premium Feature")
+                    .font(.headline)
+                
+                Text("Unlock premium to access \(feature.description.lowercased())")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                
+                Button {
+                    showSubscriptions = true
+                } label: {
+                    Text("Upgrade to Premium")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.blue)
+                        .cornerRadius(8)
+                }
+                .padding(.top, 8)
+            }
+            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color(.systemGray6))
+            .cornerRadius(12)
         }
-        items.append(shareText)
-        
-        // Add card image if available
-        if let url = URL(string: card.images.large) {
-            items.append(url)
-        }
-        
-        // Present share sheet
-        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        
-        // Present the share sheet
-        if let windowScene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
-           let rootViewController = windowScene.windows.first?.rootViewController {
-            rootViewController.present(activityVC, animated: true)
-        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                .background(Color(.systemBackground))
+        )
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - Activity View Controller Wrapper
+
+struct ActivityViewControllerWrapper: UIViewControllerRepresentable {
+    let activityItems: [Any]
+    let applicationActivities: [UIActivity]?
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: activityItems, applicationActivities: applicationActivities)
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {
+        // Nothing to update
     }
 } 

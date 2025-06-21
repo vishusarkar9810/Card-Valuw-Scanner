@@ -625,7 +625,8 @@ struct CardDetailViewWrapper: View {
     let model: CollectionViewModel
     
     var body: some View {
-        CardDetailView(card: card, collection: model.selectedCollection, persistenceManager: model.persistenceManager)
+        let detailViewModel = CardDetailViewModel(card: card, pokemonTCGService: model.pokemonTCGService, persistenceManager: model.persistenceManager, collection: model.selectedCollection)
+        CardDetailView(model: detailViewModel)
     }
 }
 
@@ -654,12 +655,10 @@ struct FilterChip: View {
 // MARK: - Preview
 
 #Preview {
-    let pokemonTCGService = PokemonTCGService(apiKey: "your-api-key-here")
-    let modelContext = try! ModelContainer(for: CardEntity.self, CollectionEntity.self).mainContext
-    let persistenceManager = PersistenceManager(modelContext: modelContext)
-    let viewModel = CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
-    
-    return CollectionView(model: viewModel)
+    let persistenceManager = PersistenceManager.preview
+    let pokemonTCGService = PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey)
+    let viewModel = CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager, subscriptionService: SubscriptionService())
+    CollectionView(model: viewModel)
 }
 
 enum PokemonType: String, CaseIterable {

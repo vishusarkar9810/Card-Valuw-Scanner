@@ -1,11 +1,17 @@
 import SwiftUI
 import StoreKit
+import Observation
 
-class SubscriptionViewModel: ObservableObject {
+@Observable final class SubscriptionViewModel {
     // MARK: - Properties
     
-    @Published var isPremium = false
-    @Published var isTrialEnabled = false {
+    private let subscriptionService: SubscriptionService
+    
+    var isPremium: Bool {
+        subscriptionService.isPremium
+    }
+    
+    var isTrialEnabled = false {
         didSet {
             // Keep the selected plan in sync with the trial toggle
             if isTrialEnabled && selectedPlan != .trial {
@@ -15,8 +21,16 @@ class SubscriptionViewModel: ObservableObject {
             }
         }
     }
-    @Published var isLoading = false
-    @Published var selectedPlan: SubscriptionPlan = .yearly {
+    
+    var isLoading: Bool {
+        subscriptionService.isLoading
+    }
+    
+    var errorMessage: String? {
+        subscriptionService.errorMessage
+    }
+    
+    var selectedPlan: SubscriptionPlan = .yearly {
         didSet {
             // Keep the trial toggle in sync with the selected plan
             isTrialEnabled = (selectedPlan == .trial)
@@ -24,17 +38,33 @@ class SubscriptionViewModel: ObservableObject {
     }
     
     // Subscription options
-    let yearlyPlanPrice = "₹2,499.00"
+    var yearlyPlanPrice: String {
+        subscriptionService.formattedPrice(for: subscriptionService.yearlySubscription)
+    }
+    
+    // Hard-coded values for UI display (these would ideally come from the server)
     let yearlyPlanOriginalPrice = "₹41,548.00"
     let yearlyPlanSavings = "93%"
-    let trialPrice = "₹799.00"
-    let trialDuration = "3-Day"
+    
+    var trialPrice: String {
+        subscriptionService.formattedPrice(for: subscriptionService.trialSubscription)
+    }
+    
+    var trialDuration: String {
+        subscriptionService.formattedSubscriptionPeriod(for: subscriptionService.trialSubscription)
+    }
     
     // MARK: - Subscription Plans
     
     enum SubscriptionPlan {
         case yearly
         case trial
+    }
+    
+    // MARK: - Initialization
+    
+    init(subscriptionService: SubscriptionService = SubscriptionService()) {
+        self.subscriptionService = subscriptionService
     }
     
     // MARK: - Methods
@@ -47,34 +77,21 @@ class SubscriptionViewModel: ObservableObject {
         isTrialEnabled.toggle()
     }
     
-    func startFreeTrial() {
-        isLoading = true
-        selectPlan(.trial)
-        
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.isLoading = false
-            self.isTrialEnabled = true
-        }
+    func startFreeTrial() async {
+        await subscriptionService.startFreeTrial()
     }
     
-    func purchaseYearlyPlan() {
-        isLoading = true
-        selectPlan(.yearly)
-        
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.isLoading = false
-            self.isPremium = true
-        }
+    func purchaseYearlyPlan() async {
+        await subscriptionService.purchaseYearlyPlan()
     }
     
-    func restorePurchases() {
-        isLoading = true
-        
-        // Simulate network delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            self.isLoading = false
-        }
+    func restorePurchases() async {
+        await subscriptionService.restorePurchases()
+    }
+    
+    // MARK: - Feature Access
+    
+    func canAccessPremiumFeature(_ feature: PremiumFeature) -> Bool {
+        return subscriptionService.canAccessPremiumFeature(feature)
     }
 } 

@@ -8,8 +8,11 @@ struct MainTabView: View {
     private let cardScannerService: CardScannerService
     
     @Environment(\.modelContext) private var modelContext
+    @Environment(\.subscriptionService) private var subscriptionService
     @State private var selectedTab = 0
-    @StateObject private var subscriptionViewModel = SubscriptionViewModel()
+    @State private var showingScanner = false
+    @State private var showingSettings = false
+    @State private var showingSubscriptions = false
     
     // Create shared instances of view models
     @State private var scannerViewModel: ScannerViewModel
@@ -18,6 +21,7 @@ struct MainTabView: View {
     
     // MARK: - Initialization
     
+    @MainActor
     init() {
         // Initialize services
         self.pokemonTCGService = PokemonTCGService(apiKey: Configuration.pokemonTcgApiKey)
@@ -37,7 +41,7 @@ struct MainTabView: View {
         
         // Initialize view models with shared persistence manager
         _scannerViewModel = State(initialValue: ScannerViewModel(cardScannerService: cardScannerService, pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
-        _collectionViewModel = State(initialValue: CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
+        _collectionViewModel = State(initialValue: CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager, subscriptionService: SubscriptionService()))
         _browseViewModel = State(initialValue: BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
     }
     
@@ -82,7 +86,6 @@ struct MainTabView: View {
                 }
                 .tag(3)
         }
-        .environmentObject(subscriptionViewModel)
         .onAppear {
             // Update the persistence manager with the injected model context
             let persistenceManager = PersistenceManager(modelContext: modelContext)
@@ -103,6 +106,11 @@ struct MainTabView: View {
 }
 
 #Preview {
-    MainTabView()
-        .modelContainer(for: [CardEntity.self, CollectionEntity.self], inMemory: true)
+    @MainActor func previewFactory() -> some View {
+        MainTabView()
+            .modelContainer(for: [CardEntity.self, CollectionEntity.self], inMemory: true)
+            .environment(SubscriptionService())
+    }
+    
+    return previewFactory()
 } 

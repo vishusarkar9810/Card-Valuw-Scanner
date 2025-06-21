@@ -3,7 +3,7 @@ import SwiftUI
 struct SubscriptionView: View {
     // MARK: - Properties
     
-    @ObservedObject var viewModel: SubscriptionViewModel
+    @State var viewModel: SubscriptionViewModel
     @Environment(\.dismiss) private var dismiss
     @Environment(\.presentationMode) private var presentationMode
     @Binding var isPresented: Bool
@@ -85,10 +85,9 @@ struct SubscriptionView: View {
                     
                     // Features list
                     VStack(alignment: .leading, spacing: 22) {
-                        featureRow(icon: "chart.line.uptrend.xyaxis.circle.fill", text: "Indepth market analysis")
-                        featureRow(icon: "magnifyingglass.circle.fill", text: "Live eBay prices & sale trends")
-                        featureRow(icon: "checkmark.circle.fill", text: "Valuations by grade & edition")
-                        featureRow(icon: "folder.fill.badge.plus", text: "Add unlimited collections")
+                        ForEach(PremiumFeature.allCases, id: \.self) { feature in
+                            featureRow(icon: feature.iconName, text: feature.description)
+                        }
                     }
                     .padding(.horizontal, 20)
                     .padding(.bottom, 30)
@@ -242,10 +241,17 @@ struct SubscriptionView: View {
                     
                     // Try for free button
                     Button(action: {
-                        if viewModel.selectedPlan == .yearly {
-                            viewModel.purchaseYearlyPlan()
-                        } else {
-                            viewModel.startFreeTrial()
+                        Task {
+                            if viewModel.selectedPlan == .yearly {
+                                await viewModel.purchaseYearlyPlan()
+                            } else {
+                                await viewModel.startFreeTrial()
+                            }
+                            
+                            // If purchase was successful, dismiss the view
+                            if viewModel.isPremium {
+                                isPresented = false
+                            }
                         }
                     }) {
                         HStack {
@@ -266,10 +272,27 @@ struct SubscriptionView: View {
                     
                     // Restore link
                     Button("Restore") {
-                        viewModel.restorePurchases()
+                        Task {
+                            await viewModel.restorePurchases()
+                            
+                            // If restore was successful, dismiss the view
+                            if viewModel.isPremium {
+                                isPresented = false
+                            }
+                        }
                     }
                     .foregroundColor(.blue)
                     .padding(.bottom)
+                    
+                    // Error message (if any)
+                    if let errorMessage = viewModel.errorMessage {
+                        Text(errorMessage)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal)
+                            .padding(.bottom)
+                    }
                     
                     // Terms and Privacy
                     HStack {

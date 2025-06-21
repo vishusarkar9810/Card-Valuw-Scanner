@@ -117,7 +117,7 @@ import SwiftUI
     
     // MARK: - Sharing
     
-    func shareCard() -> UIActivityViewController {
+    func shareCard() -> (activityItems: [Any], applicationActivities: [UIActivity]?) {
         // Create items to share
         var items: [Any] = []
         
@@ -146,10 +146,7 @@ import SwiftUI
         
         items.append(cardDetails)
         
-        // Create and configure activity view controller
-        let activityViewController = UIActivityViewController(activityItems: items, applicationActivities: nil)
-        
-        return activityViewController
+        return (activityItems: items, applicationActivities: nil)
     }
     
     // MARK: - Collection Management
