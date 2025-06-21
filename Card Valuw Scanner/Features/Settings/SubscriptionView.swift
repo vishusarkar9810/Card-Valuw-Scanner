@@ -52,7 +52,9 @@ struct SubscriptionView: View {
                         // Yearly plan option with Save badge
                         ZStack(alignment: .topTrailing) {
                             VStack(spacing: 0) {
-                                Button(action: viewModel.purchaseYearlyPlan) {
+                                Button(action: {
+                                    viewModel.selectPlan(.yearly)
+                                }) {
                                     HStack {
                                         VStack(alignment: .leading) {
                                             Text("Yearly Plan")
@@ -74,12 +76,14 @@ struct SubscriptionView: View {
                                         // Radio button
                                         ZStack {
                                             Circle()
-                                                .stroke(accentColor, lineWidth: 2)
+                                                .stroke(viewModel.selectedPlan == .yearly ? accentColor : Color.gray, lineWidth: 2)
                                                 .frame(width: 24, height: 24)
                                             
-                                            Circle()
-                                                .fill(accentColor)
-                                                .frame(width: 16, height: 16)
+                                            if viewModel.selectedPlan == .yearly {
+                                                Circle()
+                                                    .fill(accentColor)
+                                                    .frame(width: 16, height: 16)
+                                            }
                                         }
                                     }
                                     .padding()
@@ -92,7 +96,7 @@ struct SubscriptionView: View {
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
-                                    .stroke(accentColor, lineWidth: 2)
+                                    .stroke(viewModel.selectedPlan == .yearly ? accentColor : Color.clear, lineWidth: 2)
                             )
                             
                             // Save badge positioned at the top right
@@ -110,7 +114,9 @@ struct SubscriptionView: View {
                         
                         // Trial option
                         VStack(spacing: 0) {
-                            Button(action: viewModel.startFreeTrial) {
+                            Button(action: {
+                                viewModel.selectPlan(.trial)
+                            }) {
                                 HStack {
                                     VStack(alignment: .leading) {
                                         Text("\(viewModel.trialDuration) Trial")
@@ -134,9 +140,17 @@ struct SubscriptionView: View {
                                         .cornerRadius(12)
                                     
                                     // Radio button
-                                    Circle()
-                                        .stroke(Color.gray, lineWidth: 2)
-                                        .frame(width: 24, height: 24)
+                                    ZStack {
+                                        Circle()
+                                            .stroke(viewModel.selectedPlan == .trial ? accentColor : Color.gray, lineWidth: 2)
+                                            .frame(width: 24, height: 24)
+                                        
+                                        if viewModel.selectedPlan == .trial {
+                                            Circle()
+                                                .fill(accentColor)
+                                                .frame(width: 16, height: 16)
+                                        }
+                                    }
                                 }
                                 .padding()
                                 .frame(maxWidth: .infinity)
@@ -146,6 +160,10 @@ struct SubscriptionView: View {
                         }
                         .background(Color(.systemGray6).opacity(0.5))
                         .cornerRadius(12)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12)
+                                .stroke(viewModel.selectedPlan == .trial ? accentColor : Color.clear, lineWidth: 2)
+                        )
                         .padding(.horizontal)
                         
                         // Trial toggle
@@ -158,6 +176,11 @@ struct SubscriptionView: View {
                             Toggle("", isOn: $viewModel.isTrialEnabled)
                                 .labelsHidden()
                                 .tint(.green)
+                                .onChange(of: viewModel.isTrialEnabled) { newValue in
+                                    if newValue {
+                                        viewModel.selectPlan(.trial)
+                                    }
+                                }
                         }
                         .padding()
                         .background(Color(.systemGray6))
@@ -168,9 +191,15 @@ struct SubscriptionView: View {
                     Spacer(minLength: 30)
                     
                     // Try for free button
-                    Button(action: viewModel.startFreeTrial) {
+                    Button(action: {
+                        if viewModel.selectedPlan == .yearly {
+                            viewModel.purchaseYearlyPlan()
+                        } else {
+                            viewModel.startFreeTrial()
+                        }
+                    }) {
                         HStack {
-                            Text("Try for Free")
+                            Text(viewModel.selectedPlan == .yearly ? "Purchase" : "Try for Free")
                                 .font(.headline)
                                 .foregroundColor(.white)
                             
