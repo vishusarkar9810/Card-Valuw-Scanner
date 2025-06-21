@@ -49,9 +49,9 @@ struct SubscriptionView: View {
                     
                     // Subscription options
                     VStack(spacing: 20) {
-                        // Yearly plan option
-                        VStack(spacing: 0) {
-                            ZStack(alignment: .topTrailing) {
+                        // Yearly plan option with Save badge
+                        ZStack(alignment: .topTrailing) {
+                            VStack(spacing: 0) {
                                 Button(action: viewModel.purchaseYearlyPlan) {
                                     HStack {
                                         VStack(alignment: .leading) {
@@ -87,25 +87,25 @@ struct SubscriptionView: View {
                                     .background(Color(.systemBackground))
                                 }
                                 .buttonStyle(PlainButtonStyle())
-                                
-                                // Save badge
-                                Text("SAVE \(viewModel.yearlyPlanSavings)")
-                                    .font(.caption)
-                                    .bold()
-                                    .foregroundColor(.white)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(accentColor)
-                                    .cornerRadius(8)
-                                    .offset(x: -16, y: 8)
                             }
+                            .background(Color(.systemBackground))
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(accentColor, lineWidth: 2)
+                            )
+                            
+                            // Save badge positioned at the top right
+                            Text("SAVE \(viewModel.yearlyPlanSavings)")
+                                .font(.caption)
+                                .bold()
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(accentColor)
+                                .cornerRadius(8)
+                                .offset(x: -16, y: -10)
                         }
-                        .background(Color(.systemBackground))
-                        .cornerRadius(12)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 12)
-                                .stroke(accentColor, lineWidth: 2)
-                        )
                         .padding(.horizontal)
                         
                         // Trial option
