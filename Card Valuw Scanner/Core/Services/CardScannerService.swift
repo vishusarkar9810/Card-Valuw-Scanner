@@ -55,7 +55,14 @@ class CardScannerService {
     ///   - strategy: The processing strategy to use
     ///   - completion: Callback with recognized strings or empty array if failed
     func recognizeText(in image: UIImage, strategy: ProcessingStrategy = .normal, completion: @escaping ([String]) -> Void) {
-        guard let _ = image.cgImage else {
+        guard let cgImage = image.cgImage else {
+            completion([])
+            return
+        }
+        
+        // Validate image dimensions to prevent Vision API errors
+        if cgImage.width < 10 || cgImage.height < 10 {
+            print("Image too small for text recognition: \(cgImage.width) x \(cgImage.height)")
             completion([])
             return
         }
@@ -67,10 +74,23 @@ class CardScannerService {
             return
         }
         
+        // Additional dimension check after preprocessing
+        if processedCGImage.width < 10 || processedCGImage.height < 10 {
+            print("Processed image too small for text recognition: \(processedCGImage.width) x \(processedCGImage.height)")
+            completion([])
+            return
+        }
+        
         // Create a separate function to handle the request completion
         func handleRecognizedText(request: VNRequest, error: Error?) {
-            guard let observations = request.results as? [VNRecognizedTextObservation],
-                  error == nil else {
+            // Check for errors first
+            if let error = error {
+                print("Failed to perform text recognition: \(error)")
+                completion([])
+                return
+            }
+            
+            guard let observations = request.results as? [VNRecognizedTextObservation] else {
                 completion([])
                 return
             }
@@ -411,6 +431,13 @@ class CardScannerService {
     /// - Parameter image: The image to detect card edges in
     /// - Returns: Cropped image containing just the card, or original if detection fails
     func detectAndCropCard(_ image: UIImage) -> UIImage {
+        // Validate input image
+        guard let cgImage = image.cgImage,
+              cgImage.width >= 50, cgImage.height >= 50 else {
+            print("Input image too small for card detection")
+            return image
+        }
+        
         // First try to detect rectangular shapes that might be cards
         let edgeProcessedImage = preprocessImage(image, strategy: .edges)
         
@@ -439,9 +466,14 @@ class CardScannerService {
             perspectiveCorrection?.setValue(CIVector(cgPoint: cardFeature.bottomLeft), forKey: "inputBottomLeft")
             
             if let output = perspectiveCorrection?.outputImage {
-                let context = CIContext(options: nil)
-                if let cgImage = context.createCGImage(output, from: output.extent) {
-                    return UIImage(cgImage: cgImage)
+                // Validate the output dimensions
+                if output.extent.width >= 50 && output.extent.height >= 50 {
+                    let context = CIContext(options: nil)
+                    if let cgImage = context.createCGImage(output, from: output.extent) {
+                        return UIImage(cgImage: cgImage)
+                    }
+                } else {
+                    print("Cropped card too small: \(output.extent.width) x \(output.extent.height)")
                 }
             }
         }
@@ -454,66 +486,50 @@ class CardScannerService {
     /// - Parameter image: The image to recognize text from
     /// - Returns: Array of recognized strings
     func recognizeText(in image: UIImage) async -> [String] {
-        // Try multiple processing strategies and combine results for better accuracy
-        let normalResults = await withCheckedContinuation { continuation in
-            recognizeText(in: image, strategy: .normal) { strings in
-                continuation.resume(returning: strings)
-            }
+        // Validate image dimensions
+        guard let cgImage = image.cgImage, cgImage.width >= 10, cgImage.height >= 10 else {
+            print("Image too small for async text recognition")
+            return []
         }
         
-        let enhancedResults = await withCheckedContinuation { continuation in
-            recognizeText(in: image, strategy: .enhanced) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
+        // Use async/await for each strategy instead of continuations
+        async let normalResults = recognizeTextWithStrategy(image, strategy: .normal)
+        async let enhancedResults = recognizeTextWithStrategy(image, strategy: .enhanced)
+        async let topSectionResults = recognizeTextWithStrategy(image, strategy: .topSection)
+        async let hpSectionResults = recognizeTextWithStrategy(image, strategy: .hpSection)
         
-        // Add top section strategy specifically for card name detection
-        let topSectionResults = await withCheckedContinuation { continuation in
-            recognizeText(in: image, strategy: .topSection) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
+        // Wait for all results
+        let results = await [normalResults, enhancedResults, topSectionResults, hpSectionResults]
         
-        // Add HP section strategy for better HP recognition
-        let hpSectionResults = await withCheckedContinuation { continuation in
-            recognizeText(in: image, strategy: .hpSection) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
-        
-        // Combine all results with priority to top section and HP section results
+        // Combine and deduplicate results
         var combinedResults: [String] = []
         
         // First add top section results (likely to contain name)
-        combinedResults.append(contentsOf: topSectionResults)
+        combinedResults.append(contentsOf: results[2])
         
         // Then add HP section results
-        for string in hpSectionResults {
+        for string in results[3] {
             if !combinedResults.contains(string) {
                 combinedResults.append(string)
             }
         }
         
         // Then add normal and enhanced results
-        for string in normalResults {
+        for string in results[0] {
             if !combinedResults.contains(string) {
                 combinedResults.append(string)
             }
         }
         
-        for string in enhancedResults {
+        for string in results[1] {
             if !combinedResults.contains(string) {
                 combinedResults.append(string)
             }
         }
         
         // If we successfully cropped the card, also try brightened strategy
-        if image.size != image.size {
-            let brightenedResults = await withCheckedContinuation { continuation in
-                recognizeText(in: image, strategy: .brightened) { strings in
-                    continuation.resume(returning: strings)
-                }
-            }
+        if image.size.width >= 100 && image.size.height >= 100 {
+            let brightenedResults = await recognizeTextWithStrategy(image, strategy: .brightened)
             
             for string in brightenedResults {
                 if !combinedResults.contains(string) {
@@ -523,6 +539,19 @@ class CardScannerService {
         }
         
         return combinedResults
+    }
+    
+    /// Helper method to recognize text with a specific strategy using async/await
+    /// - Parameters:
+    ///   - image: The image to process
+    ///   - strategy: The processing strategy to use
+    /// - Returns: Array of recognized strings
+    private func recognizeTextWithStrategy(_ image: UIImage, strategy: ProcessingStrategy) async -> [String] {
+        return await withCheckedContinuation { continuation in
+            recognizeText(in: image, strategy: strategy) { strings in
+                continuation.resume(returning: strings)
+            }
+        }
     }
     
     /// Extracts potential card information from recognized text
@@ -571,9 +600,25 @@ class CardScannerService {
             evaluatePotentialSetInfo(cleanText, potentialSets: &potentialSets)
         }
         
-        // Find the name with the highest confidence score
-        if let bestName = potentialNames.max(by: { $0.score < $1.score })?.name {
-            cardInfo["name"] = bestName
+        // Look specifically for name+HP combinations for higher accuracy
+        var potentialNameHP: [(name: String, hp: String, score: Int)] = []
+        extractNameAndHP(from: recognizedText, potentialNameHP: &potentialNameHP)
+        
+        // If we found name+HP combinations, prioritize them over individual extractions
+        if let bestNameHP = potentialNameHP.max(by: { $0.score < $1.score }) {
+            cardInfo["name"] = bestNameHP.name
+            cardInfo["hp"] = bestNameHP.hp
+            cardInfo["nameHPConfidence"] = String(bestNameHP.score) // Store confidence for debugging
+        } else {
+            // Find the name with the highest confidence score
+            if let bestName = potentialNames.max(by: { $0.score < $1.score })?.name {
+                cardInfo["name"] = bestName
+            }
+            
+            // Find the HP with the highest confidence score
+            if let bestHP = potentialHPs.max(by: { $0.score < $1.score })?.hp {
+                cardInfo["hp"] = bestHP
+            }
         }
         
         // Find the set with the highest confidence score
@@ -584,11 +629,6 @@ class CardScannerService {
         // Find the number with the highest confidence score
         if let bestNumber = potentialNumbers.max(by: { $0.score < $1.score })?.number {
             cardInfo["number"] = bestNumber
-        }
-        
-        // Find the HP with the highest confidence score
-        if let bestHP = potentialHPs.max(by: { $0.score < $1.score })?.hp {
-            cardInfo["hp"] = bestHP
         }
         
         return cardInfo
@@ -980,6 +1020,12 @@ class CardScannerService {
     /// - Parameter image: The original card image
     /// - Returns: Cropped image focusing on the name area
     private func cropToNameArea(_ image: UIImage) -> UIImage {
+        // Validate image dimensions
+        guard image.size.width >= 50, image.size.height >= 50 else {
+            print("Image too small for cropping: \(image.size.width) x \(image.size.height)")
+            return image
+        }
+        
         let nameAreaHeight = image.size.height * 0.15
         let nameAreaY = image.size.height * 0.05 // Start a bit from the top to avoid borders
         
@@ -989,6 +1035,12 @@ class CardScannerService {
             width: image.size.width * 0.8, // Use 80% of width
             height: nameAreaHeight
         )
+        
+        // Ensure the cropped area has reasonable dimensions
+        if nameRect.width < 10 || nameRect.height < 10 {
+            print("Cropped area too small: \(nameRect.width) x \(nameRect.height)")
+            return image
+        }
         
         // Create graphics context for cropping
         UIGraphicsBeginImageContextWithOptions(
@@ -1017,6 +1069,12 @@ class CardScannerService {
         // First try to detect and crop the card
         let croppedImage = detectAndCropCard(image)
         
+        // Validate image dimensions
+        guard croppedImage.size.width >= 50, croppedImage.size.height >= 50 else {
+            print("Cropped image too small for card identification: \(croppedImage.size.width) x \(croppedImage.size.height)")
+            return [:]
+        }
+        
         // Try specialized name extraction first for higher accuracy
         if let nameResult = await extractCardName(from: croppedImage) {
             var cardInfo = [String: String]()
@@ -1024,11 +1082,7 @@ class CardScannerService {
             cardInfo["nameConfidence"] = String(nameResult.confidence)
             
             // Try to get HP using standard methods
-            let hpSectionResults = await withCheckedContinuation { continuation in
-                recognizeText(in: croppedImage, strategy: .hpSection) { strings in
-                    continuation.resume(returning: strings)
-                }
-            }
+            let hpSectionResults = await recognizeTextWithStrategy(croppedImage, strategy: .hpSection)
             
             // Extract HP from the HP section results
             var potentialHPs: [(hp: String, score: Int)] = []
@@ -1042,11 +1096,7 @@ class CardScannerService {
             }
             
             // Try to get card number using standard methods
-            let normalResults = await withCheckedContinuation { continuation in
-                recognizeText(in: croppedImage, strategy: .normal) { strings in
-                    continuation.resume(returning: strings)
-                }
-            }
+            let normalResults = await recognizeTextWithStrategy(croppedImage, strategy: .normal)
             
             // Extract potential card numbers and sets
             var potentialNumbers: [(number: String, score: Int)] = []
@@ -1083,88 +1133,11 @@ class CardScannerService {
         }
         
         // Fall back to standard recognition if specialized extraction fails
-        // Try multiple processing strategies for better results
-        let normalResults = await withCheckedContinuation { continuation in
-            recognizeText(in: croppedImage, strategy: .normal) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
+        // Use our multi-strategy text recognition
+        let recognizedText = await recognizeText(in: croppedImage)
         
-        let enhancedResults = await withCheckedContinuation { continuation in
-            recognizeText(in: croppedImage, strategy: .enhanced) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
-        
-        let topSectionResults = await withCheckedContinuation { continuation in
-            recognizeText(in: croppedImage, strategy: .topSection) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
-        
-        // Add HP section strategy for better HP recognition
-        let hpSectionResults = await withCheckedContinuation { continuation in
-            recognizeText(in: croppedImage, strategy: .hpSection) { strings in
-                continuation.resume(returning: strings)
-            }
-        }
-        
-        // Combine all results with priority to top section and HP section results
-        var combinedResults: [String] = []
-        
-        // First add top section results (likely to contain name)
-        combinedResults.append(contentsOf: topSectionResults)
-        
-        // Then add HP section results
-        for string in hpSectionResults {
-            if !combinedResults.contains(string) {
-                combinedResults.append(string)
-            }
-        }
-        
-        // Then add normal and enhanced results
-        for string in normalResults {
-            if !combinedResults.contains(string) {
-                combinedResults.append(string)
-            }
-        }
-        
-        for string in enhancedResults {
-            if !combinedResults.contains(string) {
-                combinedResults.append(string)
-            }
-        }
-        
-        // If we successfully cropped the card, also try brightened strategy
-        if croppedImage.size != image.size {
-            let brightenedResults = await withCheckedContinuation { continuation in
-                recognizeText(in: croppedImage, strategy: .brightened) { strings in
-                    continuation.resume(returning: strings)
-                }
-            }
-            
-            for string in brightenedResults {
-                if !combinedResults.contains(string) {
-                    combinedResults.append(string)
-                }
-            }
-        }
-        
-        // Extract card info with emphasis on name+HP combinations
-        var cardInfo = extractCardInfo(from: combinedResults)
-        
-        // Look specifically for name+HP combinations for higher accuracy
-        var potentialNameHP: [(name: String, hp: String, score: Int)] = []
-        extractNameAndHP(from: combinedResults, potentialNameHP: &potentialNameHP)
-        
-        // If we found name+HP combinations, prioritize them over individual extractions
-        if let bestNameHP = potentialNameHP.max(by: { $0.score < $1.score }) {
-            cardInfo["name"] = bestNameHP.name
-            cardInfo["hp"] = bestNameHP.hp
-            cardInfo["nameHPConfidence"] = String(bestNameHP.score) // Store confidence for debugging
-        }
-        
-        return cardInfo
+        // Extract card info from the recognized text
+        return extractCardInfo(from: recognizedText)
     }
     
     /// Extract visual features from a card image for similarity matching

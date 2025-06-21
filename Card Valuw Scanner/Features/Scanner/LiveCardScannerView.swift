@@ -580,6 +580,16 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
         // Create a Vision image request handler
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         
+        // Check buffer dimensions
+        let width = CVPixelBufferGetWidth(pixelBuffer)
+        let height = CVPixelBufferGetHeight(pixelBuffer)
+        
+        // Ensure minimum dimensions for Vision processing
+        guard width >= 10 && height >= 10 else {
+            print("Warning: Sample buffer too small for processing: \(width) x \(height)")
+            return
+        }
+        
         let imageRequestHandler = VNImageRequestHandler(
             cvPixelBuffer: pixelBuffer,
             orientation: .right,
@@ -587,8 +597,10 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
         )
         
         // Perform rectangle detection
+        guard let rectangleRequest = rectangleRequest else { return }
+        
         do {
-            try imageRequestHandler.perform([rectangleRequest!])
+            try imageRequestHandler.perform([rectangleRequest])
         } catch {
             print("Failed to perform rectangle detection: \(error)")
         }
@@ -597,8 +609,10 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
     // MARK: - AVCapturePhotoCaptureDelegate
     
     func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-        guard let imageData = photo.fileDataRepresentation(),
+        guard error == nil,
+              let imageData = photo.fileDataRepresentation(),
               let image = UIImage(data: imageData) else {
+            print("Error processing captured photo: \(error?.localizedDescription ?? "Unknown error")")
             isProcessing = false
             return
         }
@@ -622,13 +636,23 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
                 height: detectedRect.height * imageSize.height
             )
             
-            // Crop the image to the detected rectangle
-            let croppedImage = ciImage.cropped(to: pixelRect)
-            let context = CIContext()
-            if let cgImage = context.createCGImage(croppedImage, from: croppedImage.extent) {
-                let croppedUIImage = UIImage(cgImage: cgImage)
-                delegate?.cameraViewController(self, didCapturePhoto: croppedUIImage)
-                return
+            // Validate the crop rectangle dimensions
+            if pixelRect.width >= 10 && pixelRect.height >= 10 {
+                // Crop the image to the detected rectangle
+                let croppedImage = ciImage.cropped(to: pixelRect)
+                let context = CIContext()
+                
+                // Ensure the cropped image has valid dimensions
+                if croppedImage.extent.width >= 10 && croppedImage.extent.height >= 10,
+                   let cgImage = context.createCGImage(croppedImage, from: croppedImage.extent) {
+                    let croppedUIImage = UIImage(cgImage: cgImage)
+                    delegate?.cameraViewController(self, didCapturePhoto: croppedUIImage)
+                    return
+                } else {
+                    print("Warning: Cropped image has invalid dimensions: \(croppedImage.extent.width) x \(croppedImage.extent.height)")
+                }
+            } else {
+                print("Warning: Crop rectangle has invalid dimensions: \(pixelRect.width) x \(pixelRect.height)")
             }
         }
         
