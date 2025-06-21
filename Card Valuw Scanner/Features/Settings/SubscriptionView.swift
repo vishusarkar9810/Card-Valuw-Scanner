@@ -10,6 +10,13 @@ struct SubscriptionView: View {
     
     private let accentColor = Color.red
     
+    // Animation states
+    @State private var isAnimating = false
+    @State private var cardOffset1 = CGSize(width: 0, height: 0)
+    @State private var cardOffset3 = CGSize(width: 0, height: 0)
+    @State private var giftScale: CGFloat = 1.0
+    @State private var giftOpacity: Double = 1.0
+    
     // MARK: - Body
     
     var body: some View {
@@ -21,21 +28,60 @@ struct SubscriptionView: View {
             // Content
             ScrollView {
                 VStack(spacing: 0) {
-                    // Header with gift box
+                    // Header with gift box animation
                     VStack(spacing: 24) {
-                        // Use SF Symbol as fallback
-                        Image(systemName: "gift.fill")
-                            .resizable()
-                            .aspectRatio(contentMode: .fit)
-                            .frame(width: 120, height: 120)
-                            .foregroundColor(accentColor)
-                            .padding(.top, 60) // Extra padding for status bar
+                        ZStack {
+                            // Gift box
+                            Image(systemName: "gift.fill")
+                                .resizable()
+                                .aspectRatio(contentMode: .fit)
+                                .frame(width: 120, height: 120)
+                                .foregroundColor(accentColor)
+                                .scaleEffect(giftScale)
+                                .opacity(giftOpacity)
+                            
+                            // Pokemon cards positioned around the gift box
+                            // Card 1 - Blue card (left)
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.blue)
+                                .frame(width: 60, height: 80)
+                                .overlay(
+                                    Image(systemName: "sparkles")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 30, height: 30)
+                                        .foregroundColor(.white)
+                                )
+                                .rotationEffect(.degrees(-20))
+                                .offset(cardOffset1)
+                                .opacity(isAnimating ? 1 : 0)
+                            
+                            // Card 2 - Green card (right)
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.green)
+                                .frame(width: 60, height: 80)
+                                .overlay(
+                                    Image(systemName: "flame.fill")
+                                        .resizable()
+                                        .aspectRatio(contentMode: .fit)
+                                        .frame(width: 30, height: 30)
+                                        .foregroundColor(.white)
+                                )
+                                .rotationEffect(.degrees(20))
+                                .offset(cardOffset3)
+                                .opacity(isAnimating ? 1 : 0)
+                        }
+                        .frame(height: 200) // Fixed height container to prevent layout shifts
+                        .padding(.top, 20) // Reduced top padding
+                        .onAppear {
+                            startAnimation()
+                        }
                         
                         Text("Unlock Premium Insights")
                             .font(.system(size: 32, weight: .bold))
                             .multilineTextAlignment(.center)
                     }
-                    .padding(.bottom, 30)
+                    .padding(.bottom, 20) // Reduced bottom padding
                     
                     // Features list
                     VStack(alignment: .leading, spacing: 22) {
@@ -273,6 +319,54 @@ struct SubscriptionView: View {
             }
         }
         .edgesIgnoringSafeArea(.all)
+    }
+    
+    // MARK: - Animation Methods
+    
+    private func startAnimation() {
+        // Reset animation state
+        resetAnimationState()
+        
+        // Initial positions - cards are hidden inside the gift box
+        cardOffset1 = .zero
+        cardOffset3 = .zero
+        
+        // Start animation sequence
+        withAnimation(.easeInOut(duration: 0.5)) {
+            giftScale = 1.1
+        }
+        
+        // Animate cards appearing in their final positions
+        withAnimation(.spring(response: 0.6, dampingFraction: 0.7, blendDuration: 0).delay(0.5)) {
+            isAnimating = true
+            
+            // Position cards around the gift box as shown in the screenshot
+            // Left card (blue)
+            cardOffset1 = CGSize(width: -120, height: 20)
+            
+            // Right card (green)
+            cardOffset3 = CGSize(width: 120, height: 20)
+            
+            giftScale = 1.0
+        }
+        
+        // Reset and repeat animation after delay
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
+            withAnimation(.easeInOut(duration: 0.5)) {
+                resetAnimationState()
+            }
+            
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+                startAnimation()
+            }
+        }
+    }
+    
+    private func resetAnimationState() {
+        isAnimating = false
+        cardOffset1 = .zero
+        cardOffset3 = .zero
+        giftScale = 1.0
     }
     
     // MARK: - Helper Views
