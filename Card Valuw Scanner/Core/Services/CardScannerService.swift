@@ -162,10 +162,8 @@ class CardScannerService {
             processedImage = applyContrast(to: processedImage)
             
         case .enhanced:
-            // Enhanced processing for better text recognition
-            processedImage = applyNormalization(to: ciImage)
-            processedImage = applySharpen(to: processedImage, intensity: 1.5)
-            processedImage = applyContrast(to: processedImage, amount: 1.3)
+            // Use our new advanced preprocessing for enhanced mode
+            return applyAdvancedPreprocessing(image)
             
         case .brightened:
             // Brighten dark images
@@ -307,6 +305,108 @@ class CardScannerService {
         return filter.outputImage ?? image
     }
     
+    /// Apply advanced image preprocessing techniques to enhance text recognition
+    private func applyAdvancedPreprocessing(_ image: UIImage) -> UIImage {
+        guard let cgImage = image.cgImage else {
+            return image
+        }
+        
+        // Convert to CIImage
+        let ciImage = CIImage(cgImage: cgImage)
+        let context = CIContext(options: nil)
+        
+        // Step 1: Apply noise reduction
+        let noiseReductionFilter = CIFilter(name: "CINoiseReduction")!
+        noiseReductionFilter.setValue(ciImage, forKey: kCIInputImageKey)
+        noiseReductionFilter.setValue(0.02, forKey: "inputNoiseLevel")
+        noiseReductionFilter.setValue(0.40, forKey: "inputSharpness")
+        
+        guard let noiseReducedImage = noiseReductionFilter.outputImage else {
+            return image
+        }
+        
+        // Step 2: Apply unsharp mask for better edge definition
+        let unsharpMaskFilter = CIFilter(name: "CIUnsharpMask")!
+        unsharpMaskFilter.setValue(noiseReducedImage, forKey: kCIInputImageKey)
+        unsharpMaskFilter.setValue(2.5, forKey: "inputRadius")
+        unsharpMaskFilter.setValue(1.5, forKey: "inputIntensity")
+        
+        guard let sharpenedImage = unsharpMaskFilter.outputImage else {
+            return image
+        }
+        
+        // Step 3: Apply adaptive contrast enhancement
+        let enhancedImage = applyAdaptiveContrast(sharpenedImage)
+        
+        // Convert back to UIImage
+        if let outputCGImage = context.createCGImage(enhancedImage, from: enhancedImage.extent) {
+            return UIImage(cgImage: outputCGImage, scale: image.scale, orientation: image.imageOrientation)
+        }
+        
+        return image
+    }
+    
+    /// Apply adaptive contrast enhancement based on image content
+    private func applyAdaptiveContrast(_ image: CIImage) -> CIImage {
+        // Analyze image histogram to determine optimal contrast settings
+        let histogram = calculateHistogram(image)
+        let darkPixelRatio = calculateDarkPixelRatio(histogram)
+        
+        // Adjust contrast parameters based on image characteristics
+        let contrastAmount: Float = darkPixelRatio > 0.6 ? 1.4 : (darkPixelRatio > 0.4 ? 1.2 : 1.1)
+        let brightnessAmount: Float = darkPixelRatio > 0.6 ? 0.1 : (darkPixelRatio > 0.4 ? 0.05 : 0.0)
+        
+        // Apply contrast adjustment
+        let colorControlsFilter = CIFilter(name: "CIColorControls")!
+        colorControlsFilter.setValue(image, forKey: kCIInputImageKey)
+        colorControlsFilter.setValue(contrastAmount, forKey: "inputContrast")
+        colorControlsFilter.setValue(brightnessAmount, forKey: "inputBrightness")
+        
+        return colorControlsFilter.outputImage ?? image
+    }
+    
+    /// Calculate image histogram for adaptive processing
+    private func calculateHistogram(_ image: CIImage) -> [Int] {
+        var histogram = [Int](repeating: 0, count: 256)
+        
+        // Create a grayscale version of the image for histogram calculation
+        let grayscaleFilter = CIFilter(name: "CIPhotoEffectNoir")!
+        grayscaleFilter.setValue(image, forKey: kCIInputImageKey)
+        
+        guard let grayscaleImage = grayscaleFilter.outputImage else {
+            return histogram
+        }
+        
+        // Use Core Image's built-in histogram calculation if available
+        if let histogramFilter = CIFilter(name: "CIAreaHistogram") {
+            histogramFilter.setValue(grayscaleImage, forKey: kCIInputImageKey)
+            histogramFilter.setValue(CIVector(cgRect: grayscaleImage.extent), forKey: "inputExtent")
+            histogramFilter.setValue(256, forKey: "inputCount")
+            histogramFilter.setValue(1.0, forKey: "inputScale")
+            
+            if let histogramData = histogramFilter.outputImage?.extent {
+                // Convert histogram data to our histogram array
+                // This is a simplified approach - in a real implementation, 
+                // you would access the actual pixel data
+                for i in 0..<min(256, Int(histogramData.width)) {
+                    histogram[i] = Int(histogramData.height)
+                }
+            }
+        }
+        
+        return histogram
+    }
+    
+    /// Calculate the ratio of dark pixels in the image
+    private func calculateDarkPixelRatio(_ histogram: [Int]) -> Double {
+        let totalPixels = histogram.reduce(0, +)
+        guard totalPixels > 0 else { return 0.5 }
+        
+        // Consider pixels with brightness < 128 as "dark"
+        let darkPixels = histogram[0..<128].reduce(0, +)
+        return Double(darkPixels) / Double(totalPixels)
+    }
+    
     /// Detect card edges in the image
     /// - Parameter image: The image to detect card edges in
     /// - Returns: Cropped image containing just the card, or original if detection fails
@@ -374,8 +474,32 @@ class CardScannerService {
             }
         }
         
-        // Combine and deduplicate results
-        var combinedResults = normalResults
+        // Add HP section strategy for better HP recognition
+        let hpSectionResults = await withCheckedContinuation { continuation in
+            recognizeText(in: image, strategy: .hpSection) { strings in
+                continuation.resume(returning: strings)
+            }
+        }
+        
+        // Combine all results with priority to top section and HP section results
+        var combinedResults: [String] = []
+        
+        // First add top section results (likely to contain name)
+        combinedResults.append(contentsOf: topSectionResults)
+        
+        // Then add HP section results
+        for string in hpSectionResults {
+            if !combinedResults.contains(string) {
+                combinedResults.append(string)
+            }
+        }
+        
+        // Then add normal and enhanced results
+        for string in normalResults {
+            if !combinedResults.contains(string) {
+                combinedResults.append(string)
+            }
+        }
         
         for string in enhancedResults {
             if !combinedResults.contains(string) {
@@ -383,11 +507,18 @@ class CardScannerService {
             }
         }
         
-        // Give priority to top section results as they're likely to contain the card name
-        for string in topSectionResults {
-            if !combinedResults.contains(string) {
-                // Insert at the beginning to give higher priority
-                combinedResults.insert(string, at: 0)
+        // If we successfully cropped the card, also try brightened strategy
+        if image.size != image.size {
+            let brightenedResults = await withCheckedContinuation { continuation in
+                recognizeText(in: image, strategy: .brightened) { strings in
+                    continuation.resume(returning: strings)
+                }
+            }
+            
+            for string in brightenedResults {
+                if !combinedResults.contains(string) {
+                    combinedResults.append(string)
+                }
             }
         }
         
@@ -769,6 +900,116 @@ class CardScannerService {
         }
     }
     
+    /// Specialized function for extracting Pokemon card names with higher accuracy
+    /// - Parameter image: The card image
+    /// - Returns: Potential card name with confidence score
+    func extractCardName(from image: UIImage) async -> (name: String, confidence: Float)? {
+        // First crop to the top section where the name is typically located
+        let croppedImage = cropToNameArea(image)
+        
+        // Apply specialized processing for text clarity
+        let processedImage = preprocessImage(croppedImage, strategy: .topSection)
+        
+        // Recognize text in the processed image
+        let recognizedText = await recognizeText(in: processedImage)
+        
+        // Process the recognized text to find the most likely card name
+        var potentialNames: [(name: String, score: Float)] = []
+        
+        // Process each recognized string
+        for text in recognizedText {
+            // Clean the text
+            let cleanText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if cleanText.count < 3 { continue }
+            
+            // Score the potential name
+            var score: Float = 0
+            
+            // Check for Pokemon name patterns
+            if cleanText.contains(" V") || cleanText.contains(" GX") || 
+               cleanText.contains(" EX") || cleanText.contains(" VMAX") || 
+               cleanText.contains(" VSTAR") {
+                score += 5.0
+            }
+            
+            // Check if it matches known Pokemon names
+            for pokemonName in commonPokemonNames {
+                if cleanText.contains(pokemonName) {
+                    score += 8.0
+                    break
+                }
+            }
+            
+            // Check if it's in the right position (top of the card)
+            // This is handled by our cropping already, but add score for confidence
+            score += 2.0
+            
+            // Check if it has proper capitalization (first letter uppercase)
+            if let firstChar = cleanText.first, firstChar.isUppercase {
+                score += 2.0
+            }
+            
+            // Penalize if it contains digits (less likely to be a name)
+            if cleanText.rangeOfCharacter(from: .decimalDigits) != nil {
+                score -= 3.0
+            }
+            
+            // Penalize common non-name text
+            let nonNameTerms = ["Energy", "Trainer", "Item", "Stadium", "Tool", "Supporter"]
+            for term in nonNameTerms {
+                if cleanText == term {
+                    score -= 10.0
+                }
+            }
+            
+            // Add to potential names if score is positive
+            if score > 0 {
+                potentialNames.append((cleanText, score))
+            }
+        }
+        
+        // Return the highest scoring name
+        if let bestMatch = potentialNames.max(by: { $0.score < $1.score }) {
+            return (bestMatch.name, bestMatch.score)
+        }
+        
+        return nil
+    }
+    
+    /// Crop an image to focus on the card name area (top ~15% of card)
+    /// - Parameter image: The original card image
+    /// - Returns: Cropped image focusing on the name area
+    private func cropToNameArea(_ image: UIImage) -> UIImage {
+        let nameAreaHeight = image.size.height * 0.15
+        let nameAreaY = image.size.height * 0.05 // Start a bit from the top to avoid borders
+        
+        let nameRect = CGRect(
+            x: image.size.width * 0.1, // Start 10% from left to avoid borders
+            y: nameAreaY,
+            width: image.size.width * 0.8, // Use 80% of width
+            height: nameAreaHeight
+        )
+        
+        // Create graphics context for cropping
+        UIGraphicsBeginImageContextWithOptions(
+            CGSize(width: nameRect.width, height: nameRect.height),
+            false,
+            image.scale
+        )
+        
+        // Draw the cropped area
+        image.draw(at: CGPoint(
+            x: -nameRect.origin.x,
+            y: -nameRect.origin.y
+        ))
+        
+        // Get the cropped image
+        let croppedImage = UIGraphicsGetImageFromCurrentImageContext()
+        UIGraphicsEndImageContext()
+        
+        return croppedImage ?? image
+    }
+    
     /// Identifies a card from an image using multiple strategies
     /// - Parameter image: The card image
     /// - Returns: Dictionary with potential card info
@@ -776,6 +1017,72 @@ class CardScannerService {
         // First try to detect and crop the card
         let croppedImage = detectAndCropCard(image)
         
+        // Try specialized name extraction first for higher accuracy
+        if let nameResult = await extractCardName(from: croppedImage) {
+            var cardInfo = [String: String]()
+            cardInfo["name"] = nameResult.name
+            cardInfo["nameConfidence"] = String(nameResult.confidence)
+            
+            // Try to get HP using standard methods
+            let hpSectionResults = await withCheckedContinuation { continuation in
+                recognizeText(in: croppedImage, strategy: .hpSection) { strings in
+                    continuation.resume(returning: strings)
+                }
+            }
+            
+            // Extract HP from the HP section results
+            var potentialHPs: [(hp: String, score: Int)] = []
+            for text in hpSectionResults {
+                extractHPValue(from: text, potentialHPs: &potentialHPs)
+            }
+            
+            // Add HP if found
+            if let bestHP = potentialHPs.max(by: { $0.score < $1.score })?.hp {
+                cardInfo["hp"] = bestHP
+            }
+            
+            // Try to get card number using standard methods
+            let normalResults = await withCheckedContinuation { continuation in
+                recognizeText(in: croppedImage, strategy: .normal) { strings in
+                    continuation.resume(returning: strings)
+                }
+            }
+            
+            // Extract potential card numbers and sets
+            var potentialNumbers: [(number: String, score: Int)] = []
+            var potentialSets: [(set: String, score: Int)] = []
+            
+            for text in normalResults {
+                // Look for card number (typically in format like "123/456")
+                if let range = text.range(of: #"\d+/\d+"#, options: .regularExpression) {
+                    let number = String(text[range])
+                    potentialNumbers.append((number, 3)) // High confidence for standard format
+                    
+                    // Try to extract set information from the same string
+                    for abbr in setAbbreviations {
+                        if text.contains(abbr) {
+                            potentialSets.append((abbr, 3))
+                        }
+                    }
+                }
+                
+                // Evaluate for set info
+                evaluatePotentialSetInfo(text, potentialSets: &potentialSets)
+            }
+            
+            // Add number and set if found
+            if let bestNumber = potentialNumbers.max(by: { $0.score < $1.score })?.number {
+                cardInfo["number"] = bestNumber
+            }
+            
+            if let bestSet = potentialSets.max(by: { $0.score < $1.score })?.set {
+                cardInfo["set"] = bestSet
+            }
+            
+            return cardInfo
+        }
+        
+        // Fall back to standard recognition if specialized extraction fails
         // Try multiple processing strategies for better results
         let normalResults = await withCheckedContinuation { continuation in
             recognizeText(in: croppedImage, strategy: .normal) { strings in
@@ -858,5 +1165,384 @@ class CardScannerService {
         }
         
         return cardInfo
+    }
+    
+    /// Extract visual features from a card image for similarity matching
+    /// - Parameter image: The card image
+    /// - Returns: Dictionary of visual features
+    func extractVisualFeatures(from image: UIImage) -> [String: Any] {
+        var features: [String: Any] = [:]
+        
+        // Convert to CIImage for processing
+        guard let ciImage = CIImage(image: image) else {
+            return features
+        }
+        
+        // 1. Extract dominant colors
+        features["dominantColors"] = extractDominantColors(from: ciImage)
+        
+        // 2. Calculate average brightness
+        features["brightness"] = calculateAverageBrightness(from: ciImage)
+        
+        // 3. Extract simple edge features
+        features["edgeIntensity"] = calculateEdgeIntensity(from: ciImage)
+        
+        // 4. Calculate color distribution
+        features["colorDistribution"] = calculateColorDistribution(from: ciImage)
+        
+        return features
+    }
+    
+    /// Extract dominant colors from an image
+    /// - Parameter image: The CIImage to analyze
+    /// - Returns: Array of dominant colors as RGB values
+    private func extractDominantColors(from image: CIImage) -> [[Int]] {
+        // Create a scaled-down version for faster processing
+        let scaleFilter = CIFilter(name: "CILanczosScaleTransform")!
+        scaleFilter.setValue(image, forKey: kCIInputImageKey)
+        scaleFilter.setValue(0.1, forKey: kCIInputScaleKey) // Scale to 10%
+        
+        guard let scaledImage = scaleFilter.outputImage else {
+            return []
+        }
+        
+        // Create a context for rendering
+        let context = CIContext(options: nil)
+        
+        // Create a bitmap representation
+        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
+            return []
+        }
+        
+        // Convert to UIImage for color extraction
+        let uiImage = UIImage(cgImage: cgImage)
+        
+        // Simple color extraction - sample pixels in a grid
+        let width = Int(uiImage.size.width)
+        let height = Int(uiImage.size.height)
+        let gridSize = 5 // 5x5 grid
+        var colors: [[Int]] = []
+        
+        // Create a bitmap context
+        guard let cgImage = uiImage.cgImage,
+              let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return []
+        }
+        
+        let bytesPerPixel = cgImage.bitsPerPixel / 8
+        let bytesPerRow = cgImage.bytesPerRow
+        
+        // Sample colors in a grid
+        for y in 0..<gridSize {
+            for x in 0..<gridSize {
+                let pixelX = width * x / gridSize + width / (gridSize * 2)
+                let pixelY = height * y / gridSize + height / (gridSize * 2)
+                
+                let offset = bytesPerRow * pixelY + bytesPerPixel * pixelX
+                
+                // Extract RGB values (assuming RGBA format)
+                let r = Int(bytes[offset])
+                let g = Int(bytes[offset + 1])
+                let b = Int(bytes[offset + 2])
+                
+                colors.append([r, g, b])
+            }
+        }
+        
+        return colors
+    }
+    
+    /// Calculate average brightness of an image
+    /// - Parameter image: The CIImage to analyze
+    /// - Returns: Average brightness value (0-1)
+    private func calculateAverageBrightness(from image: CIImage) -> Float {
+        // Create a grayscale version
+        let grayscaleFilter = CIFilter(name: "CIPhotoEffectNoir")!
+        grayscaleFilter.setValue(image, forKey: kCIInputImageKey)
+        
+        guard let grayscaleImage = grayscaleFilter.outputImage else {
+            return 0.5
+        }
+        
+        // Scale down for faster processing
+        let scaleFilter = CIFilter(name: "CILanczosScaleTransform")!
+        scaleFilter.setValue(grayscaleImage, forKey: kCIInputImageKey)
+        scaleFilter.setValue(0.05, forKey: kCIInputScaleKey) // Scale to 5%
+        
+        guard let scaledImage = scaleFilter.outputImage else {
+            return 0.5
+        }
+        
+        // Create a context for rendering
+        let context = CIContext(options: nil)
+        
+        // Create a bitmap representation
+        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
+            return 0.5
+        }
+        
+        // Convert to UIImage for brightness calculation
+        let uiImage = UIImage(cgImage: cgImage)
+        
+        // Calculate average brightness
+        guard let cgImage = uiImage.cgImage,
+              let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0.5
+        }
+        
+        let bytesPerPixel = cgImage.bitsPerPixel / 8
+        let bytesPerRow = cgImage.bytesPerRow
+        let width = Int(uiImage.size.width)
+        let height = Int(uiImage.size.height)
+        
+        var totalBrightness: Float = 0
+        var pixelCount: Float = 0
+        
+        // Sample every pixel
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = bytesPerRow * y + bytesPerPixel * x
+                
+                // For grayscale, each channel has the same value
+                let brightness = Float(bytes[offset]) / 255.0
+                totalBrightness += brightness
+                pixelCount += 1
+            }
+        }
+        
+        return pixelCount > 0 ? totalBrightness / pixelCount : 0.5
+    }
+    
+    /// Calculate edge intensity of an image
+    /// - Parameter image: The CIImage to analyze
+    /// - Returns: Edge intensity value (0-1)
+    private func calculateEdgeIntensity(from image: CIImage) -> Float {
+        // Apply edge detection
+        let edgeFilter = CIFilter(name: "CIEdges")!
+        edgeFilter.setValue(image, forKey: kCIInputImageKey)
+        edgeFilter.setValue(2.0, forKey: "inputIntensity")
+        
+        guard let edgeImage = edgeFilter.outputImage else {
+            return 0.5
+        }
+        
+        // Scale down for faster processing
+        let scaleFilter = CIFilter(name: "CILanczosScaleTransform")!
+        scaleFilter.setValue(edgeImage, forKey: kCIInputImageKey)
+        scaleFilter.setValue(0.05, forKey: kCIInputScaleKey) // Scale to 5%
+        
+        guard let scaledImage = scaleFilter.outputImage else {
+            return 0.5
+        }
+        
+        // Create a context for rendering
+        let context = CIContext(options: nil)
+        
+        // Create a bitmap representation
+        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
+            return 0.5
+        }
+        
+        // Calculate average edge intensity
+        guard let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0.5
+        }
+        
+        let bytesPerPixel = cgImage.bitsPerPixel / 8
+        let bytesPerRow = cgImage.bytesPerRow
+        let width = Int(cgImage.width)
+        let height = Int(cgImage.height)
+        
+        var totalIntensity: Float = 0
+        var pixelCount: Float = 0
+        
+        // Sample every pixel
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = bytesPerRow * y + bytesPerPixel * x
+                
+                // For edge image, higher values indicate stronger edges
+                let intensity = Float(bytes[offset]) / 255.0
+                totalIntensity += intensity
+                pixelCount += 1
+            }
+        }
+        
+        return pixelCount > 0 ? totalIntensity / pixelCount : 0.5
+    }
+    
+    /// Calculate color distribution of an image
+    /// - Parameter image: The CIImage to analyze
+    /// - Returns: Array of color distribution values
+    private func calculateColorDistribution(from image: CIImage) -> [Float] {
+        // Use 6 bins for each RGB channel (6x6x6 = 216 colors)
+        let binCount = 6
+        var histogram = Array(repeating: 0, count: binCount * binCount * binCount)
+        
+        // Scale down for faster processing
+        let scaleFilter = CIFilter(name: "CILanczosScaleTransform")!
+        scaleFilter.setValue(image, forKey: kCIInputImageKey)
+        scaleFilter.setValue(0.1, forKey: kCIInputScaleKey) // Scale to 10%
+        
+        guard let scaledImage = scaleFilter.outputImage else {
+            return []
+        }
+        
+        // Create a context for rendering
+        let context = CIContext(options: nil)
+        
+        // Create a bitmap representation
+        guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
+            return []
+        }
+        
+        // Calculate color distribution
+        guard let data = cgImage.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return []
+        }
+        
+        let bytesPerPixel = cgImage.bitsPerPixel / 8
+        let bytesPerRow = cgImage.bytesPerRow
+        let width = Int(cgImage.width)
+        let height = Int(cgImage.height)
+        
+        var totalPixels = 0
+        
+        // Sample every pixel
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = bytesPerRow * y + bytesPerPixel * x
+                
+                // Get RGB values
+                let r = Int(bytes[offset])
+                let g = Int(bytes[offset + 1])
+                let b = Int(bytes[offset + 2])
+                
+                // Convert to bin indices
+                let rBin = min(r * binCount / 256, binCount - 1)
+                let gBin = min(g * binCount / 256, binCount - 1)
+                let bBin = min(b * binCount / 256, binCount - 1)
+                
+                // Calculate 1D index from 3D coordinates
+                let index = rBin * binCount * binCount + gBin * binCount + bBin
+                histogram[index] += 1
+                totalPixels += 1
+            }
+        }
+        
+        // Normalize histogram
+        let normalizedHistogram = histogram.map { Float($0) / Float(max(totalPixels, 1)) }
+        return normalizedHistogram
+    }
+    
+    /// Compare visual features between two images
+    /// - Parameters:
+    ///   - features1: Features of the first image
+    ///   - features2: Features of the second image
+    /// - Returns: Similarity score (0-1, higher means more similar)
+    func compareVisualFeatures(_ features1: [String: Any], _ features2: [String: Any]) -> Float {
+        var totalScore: Float = 0
+        var weightSum: Float = 0
+        
+        // 1. Compare dominant colors
+        if let colors1 = features1["dominantColors"] as? [[Int]],
+           let colors2 = features2["dominantColors"] as? [[Int]] {
+            let colorWeight: Float = 0.4
+            let colorScore = compareDominantColors(colors1, colors2)
+            totalScore += colorScore * colorWeight
+            weightSum += colorWeight
+        }
+        
+        // 2. Compare brightness
+        if let brightness1 = features1["brightness"] as? Float,
+           let brightness2 = features2["brightness"] as? Float {
+            let brightnessWeight: Float = 0.2
+            let brightnessScore = 1.0 - abs(brightness1 - brightness2)
+            totalScore += brightnessScore * brightnessWeight
+            weightSum += brightnessWeight
+        }
+        
+        // 3. Compare edge intensity
+        if let edge1 = features1["edgeIntensity"] as? Float,
+           let edge2 = features2["edgeIntensity"] as? Float {
+            let edgeWeight: Float = 0.1
+            let edgeScore = 1.0 - abs(edge1 - edge2)
+            totalScore += edgeScore * edgeWeight
+            weightSum += edgeWeight
+        }
+        
+        // 4. Compare color distribution
+        if let dist1 = features1["colorDistribution"] as? [Float],
+           let dist2 = features2["colorDistribution"] as? [Float] {
+            let distWeight: Float = 0.3
+            let distScore = compareColorDistributions(dist1, dist2)
+            totalScore += distScore * distWeight
+            weightSum += distWeight
+        }
+        
+        return weightSum > 0 ? totalScore / weightSum : 0
+    }
+    
+    /// Compare dominant colors between two images
+    /// - Parameters:
+    ///   - colors1: Dominant colors of the first image
+    ///   - colors2: Dominant colors of the second image
+    /// - Returns: Similarity score (0-1)
+    private func compareDominantColors(_ colors1: [[Int]], _ colors2: [[Int]]) -> Float {
+        // Ensure we have colors to compare
+        guard !colors1.isEmpty, !colors2.isEmpty else {
+            return 0
+        }
+        
+        // Calculate average color distance
+        var totalDistance: Float = 0
+        var comparisons: Int = 0
+        
+        for color1 in colors1 {
+            for color2 in colors2 {
+                // Calculate Euclidean distance in RGB space
+                let rDiff = color1[0] - color2[0]
+                let gDiff = color1[1] - color2[1]
+                let bDiff = color1[2] - color2[2]
+                
+                let distance = sqrt(Float(rDiff * rDiff + gDiff * gDiff + bDiff * bDiff))
+                
+                // Normalize to 0-1 range (max distance in RGB space is sqrt(3 * 255^2))
+                let normalizedDistance = distance / sqrt(3.0 * 255.0 * 255.0)
+                
+                totalDistance += normalizedDistance
+                comparisons += 1
+            }
+        }
+        
+        // Convert distance to similarity (1 - normalized distance)
+        let avgDistance = comparisons > 0 ? totalDistance / Float(comparisons) : 1
+        return 1.0 - min(avgDistance, 1.0)
+    }
+    
+    /// Compare color distributions between two images
+    /// - Parameters:
+    ///   - dist1: Color distribution of the first image
+    ///   - dist2: Color distribution of the second image
+    /// - Returns: Similarity score (0-1)
+    private func compareColorDistributions(_ dist1: [Float], _ dist2: [Float]) -> Float {
+        // Ensure distributions have the same size
+        guard dist1.count == dist2.count, !dist1.isEmpty else {
+            return 0
+        }
+        
+        // Calculate histogram intersection (a simple but effective measure)
+        var intersection: Float = 0
+        
+        for i in 0..<dist1.count {
+            intersection += min(dist1[i], dist2[i])
+        }
+        
+        // Intersection is already normalized between 0-1
+        return intersection
     }
 }

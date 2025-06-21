@@ -90,9 +90,27 @@ final class ScannerViewModel {
             // Step 3: Search for the card using the extracted info with combined strategies
             var foundCard = false
             
-            // Try combined search with name and HP (highest accuracy)
-            // Check if we have a nameHPConfidence value which indicates a direct name+HP extraction
-            if let cardName = cardInfo["name"], let cardHP = cardInfo["hp"] {
+            // Check if we have a high-confidence name extraction
+            if let cardName = cardInfo["name"], let confidenceStr = cardInfo["nameConfidence"], 
+               let confidence = Float(confidenceStr), confidence > 7.0 {
+                // High confidence name extraction - prioritize this search
+                scanStage = .nameSearch
+                
+                // If we also have HP, use combined search
+                if let cardHP = cardInfo["hp"] {
+                    foundCard = await searchByNameAndHP(name: cardName, hp: cardHP)
+                    
+                    // If combined search fails, try name-only
+                    if !foundCard {
+                        foundCard = await searchByName(cardName)
+                    }
+                } else {
+                    // No HP, use name-only search
+                    foundCard = await searchByName(cardName)
+                }
+            } 
+            // If high-confidence name extraction failed, try the regular combined search
+            else if let cardName = cardInfo["name"], let cardHP = cardInfo["hp"] {
                 // If we have a nameHPConfidence value, this is our highest priority search
                 if let _ = cardInfo["nameHPConfidence"] {
                     scanStage = .nameSearch
@@ -717,6 +735,77 @@ final class ScannerViewModel {
         }
     }
     
+    /// Search for cards using visual similarity when text recognition fails
+    /// - Parameter image: The card image
+    /// - Returns: Boolean indicating if search was successful
+    private func searchByVisualSimilarity(_ image: UIImage) async -> Bool {
+        do {
+            // Extract visual features from the scanned image
+            let cardFeatures = cardScannerService.extractVisualFeatures(from: image)
+            
+            // We need to get a set of candidate cards to compare against
+            // Start with a broad search to get a set of potential matches
+            let query = ["page": "1", "pageSize": "20"]
+            let response = try await pokemonTCGService.searchCards(query: query)
+            
+            if response.data.isEmpty {
+                return false
+            }
+            
+            // Create a cache for downloaded images to avoid re-downloading
+            var imageCache: [String: UIImage] = [:]
+            
+            // Download and compare each card image
+            var scoredMatches: [(card: Card, score: Float)] = []
+            
+            for card in response.data {
+                guard let imageUrl = URL(string: card.images.small) else { continue }
+                
+                // Download the card image (with basic caching)
+                let cardImage: UIImage
+                if let cachedImage = imageCache[card.id] {
+                    cardImage = cachedImage
+                } else {
+                    do {
+                        let (data, _) = try await URLSession.shared.data(from: imageUrl)
+                        guard let downloadedImage = UIImage(data: data) else { continue }
+                        imageCache[card.id] = downloadedImage
+                        cardImage = downloadedImage
+                    } catch {
+                        continue // Skip this card if download fails
+                    }
+                }
+                
+                // Extract features from the downloaded card
+                let downloadedCardFeatures = cardScannerService.extractVisualFeatures(from: cardImage)
+                
+                // Compare features
+                let similarityScore = cardScannerService.compareVisualFeatures(cardFeatures, downloadedCardFeatures)
+                
+                // Add to scored matches if similarity is above threshold
+                if similarityScore > 0.6 { // Adjust threshold as needed
+                    scoredMatches.append((card, similarityScore))
+                }
+            }
+            
+            // Sort by similarity score
+            scoredMatches.sort { $0.score > $1.score }
+            
+            // Use the highest scored matches
+            potentialMatches = scoredMatches.map { $0.card }
+            
+            if !potentialMatches.isEmpty {
+                scanResult = potentialMatches.first
+                return true
+            }
+            
+            return false
+        } catch {
+            errorMessage = "Error during visual search: \(error.localizedDescription)"
+            return false
+        }
+    }
+    
     /// Try scanning again with a different approach
     func tryScanAgain() async {
         guard let image = lastScannedImage else {
@@ -807,7 +896,17 @@ final class ScannerViewModel {
                     }
                 }
             
-            case .visualSearch, .initial, .failed:
+            case .visualSearch:
+                // Try visual similarity search when text recognition fails
+                debugInfo = "Visual search: Comparing image features"
+                let croppedImage = cardScannerService.detectAndCropCard(image)
+                
+                if await searchByVisualSimilarity(croppedImage) {
+                    isProcessing = false
+                    return
+                }
+            
+            case .initial, .failed:
                 // Just try the normal process again
                 await processImage(image)
                 isProcessing = false

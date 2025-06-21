@@ -344,6 +344,10 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
     private var lastFrameTime = Date()
     private let frameProcessingInterval: TimeInterval = 0.1 // Process 10 frames per second
     
+    // Add a new method for rectangle stabilization to reduce jitter
+    private var previousRectangles: [CGRect] = []
+    private let maxPreviousRectangles = 5
+    
     override func viewDidLoad() {
         super.viewDidLoad()
         setupCamera()
@@ -434,33 +438,102 @@ class CardCameraViewController: UIViewController, AVCaptureVideoDataOutputSample
             guard let self = self, error == nil else { return }
             
             // Get detected rectangles
-            guard let results = request.results as? [VNRectangleObservation],
-                  let bestRectangle = results.first else {
+            guard let results = request.results as? [VNRectangleObservation] else {
                 DispatchQueue.main.async {
                     self.delegate?.cameraViewController(self, didDetectRectangle: nil)
                 }
                 return
             }
             
-            // Convert normalized coordinates to view coordinates
-            let rect = CGRect(
-                x: bestRectangle.boundingBox.origin.x,
-                y: 1 - bestRectangle.boundingBox.origin.y - bestRectangle.boundingBox.height,
-                width: bestRectangle.boundingBox.width,
-                height: bestRectangle.boundingBox.height
-            )
+            // Filter rectangles based on Pokemon card aspect ratio
+            // Standard Pokemon card aspect ratio is approximately 0.71 (2.5" x 3.5")
+            let cardAspectRatio: CGFloat = 0.71
+            let aspectRatioTolerance: CGFloat = 0.05
             
-            DispatchQueue.main.async {
-                self.delegate?.cameraViewController(self, didDetectRectangle: rect)
+            let cardRectangles = results.filter { rectangle in
+                let aspectRatio = rectangle.boundingBox.width / rectangle.boundingBox.height
+                return abs(aspectRatio - cardAspectRatio) < aspectRatioTolerance
+            }
+            
+            // If we have card-like rectangles, use the one with highest confidence
+            if let bestRectangle = cardRectangles.first {
+                // Convert normalized coordinates to view coordinates
+                let rect = CGRect(
+                    x: bestRectangle.boundingBox.origin.x,
+                    y: 1 - bestRectangle.boundingBox.origin.y - bestRectangle.boundingBox.height,
+                    width: bestRectangle.boundingBox.width,
+                    height: bestRectangle.boundingBox.height
+                )
+                
+                // Apply stabilization to reduce jitter
+                let stabilizedRect = self.stabilizeRectangle(rect)
+                
+                DispatchQueue.main.async {
+                    self.delegate?.cameraViewController(self, didDetectRectangle: stabilizedRect)
+                }
+            } else if let bestRectangle = results.first {
+                // Fallback to the best rectangle even if it doesn't match card aspect ratio
+                let rect = CGRect(
+                    x: bestRectangle.boundingBox.origin.x,
+                    y: 1 - bestRectangle.boundingBox.origin.y - bestRectangle.boundingBox.height,
+                    width: bestRectangle.boundingBox.width,
+                    height: bestRectangle.boundingBox.height
+                )
+                
+                DispatchQueue.main.async {
+                    self.delegate?.cameraViewController(self, didDetectRectangle: rect)
+                }
+            } else {
+                DispatchQueue.main.async {
+                    self.delegate?.cameraViewController(self, didDetectRectangle: nil)
+                }
             }
         }
         
-        // Configure rectangle detection
-        rectangleRequest?.minimumAspectRatio = 0.5 // Card aspect ratio is typically ~0.7
-        rectangleRequest?.maximumAspectRatio = 0.9
+        // Configure rectangle detection with parameters optimized for Pokemon cards
+        rectangleRequest?.minimumAspectRatio = 0.65 // Pokemon cards have ~0.71 aspect ratio
+        rectangleRequest?.maximumAspectRatio = 0.75
         rectangleRequest?.minimumSize = 0.2 // Minimum 20% of the screen
-        rectangleRequest?.maximumObservations = 1 // Only get the best rectangle
-        rectangleRequest?.minimumConfidence = 0.7 // Only confident detections
+        rectangleRequest?.maximumObservations = 3 // Get multiple rectangles to filter
+        rectangleRequest?.minimumConfidence = 0.8 // Higher confidence threshold
+        rectangleRequest?.quadratureTolerance = 10.0 // More tolerance for imperfect rectangles
+    }
+    
+    // Add a new method for rectangle stabilization to reduce jitter
+    private func stabilizeRectangle(_ rect: CGRect) -> CGRect {
+        // Add the new rectangle to our history
+        previousRectangles.append(rect)
+        
+        // Keep only the most recent rectangles
+        if previousRectangles.count > maxPreviousRectangles {
+            previousRectangles.removeFirst()
+        }
+        
+        // If we don't have enough history, just return the current rectangle
+        guard previousRectangles.count >= 3 else {
+            return rect
+        }
+        
+        // Calculate the average rectangle from recent history
+        var avgX: CGFloat = 0
+        var avgY: CGFloat = 0
+        var avgWidth: CGFloat = 0
+        var avgHeight: CGFloat = 0
+        
+        for prevRect in previousRectangles {
+            avgX += prevRect.origin.x
+            avgY += prevRect.origin.y
+            avgWidth += prevRect.width
+            avgHeight += prevRect.height
+        }
+        
+        avgX /= CGFloat(previousRectangles.count)
+        avgY /= CGFloat(previousRectangles.count)
+        avgWidth /= CGFloat(previousRectangles.count)
+        avgHeight /= CGFloat(previousRectangles.count)
+        
+        // Return the stabilized rectangle
+        return CGRect(x: avgX, y: avgY, width: avgWidth, height: avgHeight)
     }
     
     func toggleTorch(_ on: Bool) {
