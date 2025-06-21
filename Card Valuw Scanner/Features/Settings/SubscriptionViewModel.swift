@@ -50,6 +50,7 @@ import Observation
         subscriptionService.formattedPrice(for: subscriptionService.trialSubscription)
     }
     
+    // This should return "3-Day" to match App Store Connect configuration
     var trialDuration: String {
         subscriptionService.formattedSubscriptionPeriod(for: subscriptionService.trialSubscription)
     }

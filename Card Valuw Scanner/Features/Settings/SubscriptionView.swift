@@ -166,7 +166,7 @@ struct SubscriptionView: View {
                             }) {
                                 HStack {
                                     VStack(alignment: .leading) {
-                                        Text("\(viewModel.trialDuration) Trial")
+                                        Text("3-Day Trial")
                                             .font(.headline)
                                         
                                         Text("then \(viewModel.trialPrice) per week")
@@ -309,6 +309,9 @@ struct SubscriptionView: View {
             .onAppear {
                 // Ensure toggle and selected plan are in sync when view appears
                 viewModel.isTrialEnabled = (viewModel.selectedPlan == .trial)
+                
+                // Debug the trial duration
+                print("Trial duration from viewModel: \(viewModel.trialDuration)")
             }
             
             // Close button (top right)

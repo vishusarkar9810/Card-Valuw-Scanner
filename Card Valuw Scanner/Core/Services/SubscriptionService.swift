@@ -219,6 +219,12 @@ import SwiftUI
             return ""
         }
         
+        // Special handling for trial subscription
+        if product.id == trialSubscriptionID {
+            // Hardcode to 3-Day to match App Store Connect configuration
+            return "3-Day"
+        }
+        
         switch subscription.subscriptionPeriod.unit {
         case .day:
             return "\(subscription.subscriptionPeriod.value)-Day"

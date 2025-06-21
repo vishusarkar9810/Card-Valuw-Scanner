@@ -36,7 +36,7 @@ This document outlines the subscription implementation for the Pokemon Card Valu
 
 7. **Products.storekit** - Configuration file for testing in-app purchases:
    - Yearly subscription: ₹2,499.00/year
-   - Weekly subscription with 3-day free trial: ₹799.00/week
+   - Weekly subscription with 3-day free trial: ₹799.00/week (Note: UI displays "3-Day Trial")
 
 8. **Card Valuw Scanner.entitlements** - Enables StoreKit testing
 
