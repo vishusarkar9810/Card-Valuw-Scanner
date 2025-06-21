@@ -134,11 +134,11 @@ struct SubscriptionView: View {
                                     }
                                     .padding()
                                     .frame(maxWidth: .infinity)
-                                    .background(Color(.systemBackground))
+                                    .background(Color(.systemGray6).opacity(0.5))
                                 }
                                 .buttonStyle(PlainButtonStyle())
                             }
-                            .background(Color(.systemBackground))
+                            .background(Color(.systemGray6).opacity(0.5))
                             .cornerRadius(12)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 12)
