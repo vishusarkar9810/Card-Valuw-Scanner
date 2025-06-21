@@ -4,15 +4,34 @@ struct SettingsView: View {
     // MARK: - Properties
     
     @AppStorage("darkMode") private var darkMode = false
+    @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
     @State private var showPrivacyPolicy = false
     @State private var showTermsOfService = false
+    @State private var showSubscriptions = false
     
     // MARK: - Body
     
     var body: some View {
         NavigationStack {
             Form {
+                Section(header: Text("Premium")) {
+                    Button {
+                        showSubscriptions = true
+                    } label: {
+                        HStack {
+                            Image(systemName: subscriptionViewModel.isPremium ? "star.fill" : "star")
+                                .foregroundColor(.yellow)
+                            Text(subscriptionViewModel.isPremium ? "Premium Active" : "Upgrade to Premium")
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        }
+                    }
+                    .disabled(subscriptionViewModel.isPremium)
+                }
+                
                 Section(header: Text("Appearance")) {
                     Toggle("Dark Mode", isOn: $darkMode)
                 }
@@ -50,6 +69,10 @@ struct SettingsView: View {
             .sheet(isPresented: $showTermsOfService) {
                 TermsOfServiceView(isPresented: $showTermsOfService)
             }
+            .fullScreenCover(isPresented: $showSubscriptions, content: {
+                SubscriptionView(viewModel: subscriptionViewModel, isPresented: $showSubscriptions)
+                    .ignoresSafeArea()
+            })
         }
     }
 }

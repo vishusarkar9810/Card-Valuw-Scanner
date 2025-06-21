@@ -9,6 +9,7 @@ struct MainTabView: View {
     
     @Environment(\.modelContext) private var modelContext
     @State private var selectedTab = 0
+    @StateObject private var subscriptionViewModel = SubscriptionViewModel()
     
     // Create shared instances of view models
     @State private var scannerViewModel: ScannerViewModel
@@ -81,6 +82,7 @@ struct MainTabView: View {
                 }
                 .tag(3)
         }
+        .environmentObject(subscriptionViewModel)
         .onAppear {
             // Update the persistence manager with the injected model context
             let persistenceManager = PersistenceManager(modelContext: modelContext)

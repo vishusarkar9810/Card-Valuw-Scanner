@@ -468,9 +468,9 @@ class CardScannerService {
             if let output = perspectiveCorrection?.outputImage {
                 // Validate the output dimensions
                 if output.extent.width >= 50 && output.extent.height >= 50 {
-                    let context = CIContext(options: nil)
-                    if let cgImage = context.createCGImage(output, from: output.extent) {
-                        return UIImage(cgImage: cgImage)
+                let context = CIContext(options: nil)
+                if let cgImage = context.createCGImage(output, from: output.extent) {
+                    return UIImage(cgImage: cgImage)
                     }
                 } else {
                     print("Cropped card too small: \(output.extent.width) x \(output.extent.height)")
@@ -532,7 +532,7 @@ class CardScannerService {
             let brightenedResults = await recognizeTextWithStrategy(image, strategy: .brightened)
             
             for string in brightenedResults {
-                if !combinedResults.contains(string) {
+            if !combinedResults.contains(string) {
                     combinedResults.append(string)
                 }
             }
@@ -610,9 +610,9 @@ class CardScannerService {
             cardInfo["hp"] = bestNameHP.hp
             cardInfo["nameHPConfidence"] = String(bestNameHP.score) // Store confidence for debugging
         } else {
-            // Find the name with the highest confidence score
-            if let bestName = potentialNames.max(by: { $0.score < $1.score })?.name {
-                cardInfo["name"] = bestName
+        // Find the name with the highest confidence score
+        if let bestName = potentialNames.max(by: { $0.score < $1.score })?.name {
+            cardInfo["name"] = bestName
             }
             
             // Find the HP with the highest confidence score
