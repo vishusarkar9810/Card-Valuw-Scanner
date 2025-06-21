@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct SubscriptionView: View {
     // MARK: - Properties
@@ -295,9 +296,23 @@ struct SubscriptionView: View {
                     }
                     
                     // Terms and Privacy
-                    HStack {
-                        Button("Terms of Use & Privacy Policy") {
-                            // Open terms and privacy
+                    HStack(spacing: 5) {
+                        Button("Terms of Use") {
+                            if let url = URL(string: "https://aztty.com/terms") {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                        .font(.footnote)
+                        .foregroundColor(.secondary)
+                        
+                        Text("&")
+                            .font(.footnote)
+                            .foregroundColor(.secondary)
+                        
+                        Button("Privacy Policy") {
+                            if let url = URL(string: "https://aztty.com/privacy") {
+                                UIApplication.shared.open(url)
+                            }
                         }
                         .font(.footnote)
                         .foregroundColor(.secondary)
