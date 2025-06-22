@@ -420,6 +420,21 @@ struct LivePricesPageView: View {
     @State private var liveLabelScale: CGFloat = 0.5
     @State private var liveLabelOpacity: Double = 0
     @State private var pulsate = false
+    @State private var headerOffset: CGFloat = -50
+    @State private var subtitleOffset: CGFloat = -30
+    @State private var phoneRotation: Double = -10
+    @State private var phoneGlow: CGFloat = 0
+    @State private var card1Rotation: Double = 15
+    @State private var card2Rotation: Double = -10
+    @State private var card3Rotation: Double = 20
+    @State private var card1Scale: CGFloat = 0.8
+    @State private var card2Scale: CGFloat = 0.8
+    @State private var card3Scale: CGFloat = 0.8
+    @State private var cardGlows: [CGFloat] = [0, 0, 0]
+    @State private var statsOpacity: Double = 0
+    @State private var statsScale: CGFloat = 0.7
+    @State private var cardsHovering = false
+    @State private var liveGlow: CGFloat = 0
     
     var body: some View {
         VStack(spacing: 30) {
@@ -432,6 +447,8 @@ struct LivePricesPageView: View {
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .padding(.bottom, 10)
+                .offset(y: headerOffset)
+                .blur(radius: showPhone ? 0 : 10)
             
             // Subtitle
             Text("Maximize your collection's value with real-\ntime insights from eBay (Subscription\nrequired)")
@@ -439,27 +456,40 @@ struct LivePricesPageView: View {
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .offset(y: subtitleOffset)
+                .blur(radius: showPhone ? 0 : 5)
             
             Spacer()
             
             // Phone with live prices animation
             ZStack {
-                // Phone outline
+                // Phone outline with glow effect
                 RoundedRectangle(cornerRadius: 30)
                     .stroke(Color.white, lineWidth: 3)
                     .frame(width: 180, height: 360)
                     .scaleEffect(phoneScale)
+                    .rotationEffect(Angle(degrees: phoneRotation))
                     .opacity(showPhone ? 1 : 0)
+                    .shadow(color: .white, radius: phoneGlow)
                 
                 // Phone screen
                 RoundedRectangle(cornerRadius: 25)
                     .fill(Color.black)
                     .frame(width: 170, height: 340)
                     .scaleEffect(phoneScale)
+                    .rotationEffect(Angle(degrees: phoneRotation))
                     .opacity(showPhone ? 1 : 0)
                 
-                // Live label
+                // Live label with enhanced pulsating effect
                 ZStack {
+                    // Outer glow for LIVE label
+                    RoundedRectangle(cornerRadius: 10)
+                        .fill(Color.red.opacity(0.3))
+                        .frame(width: 90, height: 50)
+                        .blur(radius: liveGlow)
+                        .scaleEffect(pulsate ? 1.2 : 1.0)
+                    
+                    // LIVE label
                     RoundedRectangle(cornerRadius: 10)
                         .fill(Color.red)
                         .frame(width: 80, height: 40)
@@ -467,6 +497,7 @@ struct LivePricesPageView: View {
                             Text("LIVE")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundColor(.white)
+                                .shadow(color: .white, radius: 1)
                         )
                         .scaleEffect(pulsate ? 1.1 : 1.0)
                 }
@@ -474,9 +505,9 @@ struct LivePricesPageView: View {
                 .scaleEffect(liveLabelScale)
                 .opacity(liveLabelOpacity)
                 
-                // Pokemon cards
+                // Pokemon cards with enhanced effects
                 Group {
-                    // Card 1 (left)
+                    // Card 1 (left) - yellow/orange
                     RoundedRectangle(cornerRadius: 8)
                         .fill(LinearGradient(
                             gradient: Gradient(colors: [Color.yellow, Color.orange]),
@@ -484,11 +515,13 @@ struct LivePricesPageView: View {
                             endPoint: .bottom
                         ))
                         .frame(width: 80, height: 120)
-                        .shadow(color: .white.opacity(0.3), radius: 5)
-                        .offset(x: card1Offset, y: 0)
+                        .shadow(color: .yellow.opacity(0.7), radius: cardGlows[0])
+                        .offset(x: card1Offset, y: cardsHovering ? -5 : 0)
+                        .rotationEffect(Angle(degrees: card1Rotation))
+                        .scaleEffect(card1Scale)
                         .opacity(showCards ? 1 : 0)
                     
-                    // Card 2 (middle)
+                    // Card 2 (middle) - blue/cyan
                     RoundedRectangle(cornerRadius: 8)
                         .fill(LinearGradient(
                             gradient: Gradient(colors: [Color.blue, Color.cyan]),
@@ -496,11 +529,13 @@ struct LivePricesPageView: View {
                             endPoint: .bottom
                         ))
                         .frame(width: 80, height: 120)
-                        .shadow(color: .white.opacity(0.3), radius: 5)
-                        .offset(x: card2Offset, y: 0)
+                        .shadow(color: .blue.opacity(0.7), radius: cardGlows[1])
+                        .offset(x: card2Offset, y: cardsHovering ? -10 : 0)
+                        .rotationEffect(Angle(degrees: card2Rotation))
+                        .scaleEffect(card2Scale)
                         .opacity(showCards ? 1 : 0)
                     
-                    // Card 3 (right)
+                    // Card 3 (right) - green/mint
                     RoundedRectangle(cornerRadius: 8)
                         .fill(LinearGradient(
                             gradient: Gradient(colors: [Color.green, Color.mint]),
@@ -508,8 +543,10 @@ struct LivePricesPageView: View {
                             endPoint: .bottom
                         ))
                         .frame(width: 80, height: 120)
-                        .shadow(color: .white.opacity(0.3), radius: 5)
-                        .offset(x: card3Offset, y: 0)
+                        .shadow(color: .green.opacity(0.7), radius: cardGlows[2])
+                        .offset(x: card3Offset, y: cardsHovering ? -5 : 0)
+                        .rotationEffect(Angle(degrees: card3Rotation))
+                        .scaleEffect(card3Scale)
                         .opacity(showCards ? 1 : 0)
                 }
             }
@@ -517,11 +554,14 @@ struct LivePricesPageView: View {
             
             Spacer()
             
-            // Stats
+            // Stats with animation
             Text("Over 77,678+ Sales Tracked")
                 .font(.system(size: 16))
                 .foregroundColor(.red)
                 .padding(.bottom)
+                .opacity(statsOpacity)
+                .scaleEffect(statsScale)
+                .shadow(color: .red.opacity(0.5), radius: statsOpacity > 0.5 ? 5 : 0)
         }
         .onAppear {
             startAnimations()
@@ -529,32 +569,102 @@ struct LivePricesPageView: View {
     }
     
     private func startAnimations() {
-        // Show phone
-        withAnimation(.easeOut(duration: 0.8)) {
-            showPhone = true
-            phoneScale = 1.0
+        // Animate header and subtitle
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.6)) {
+            headerOffset = 0
         }
         
-        // Show cards after delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
-                showCards = true
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.6).delay(0.2)) {
+            subtitleOffset = 0
+        }
+        
+        // Show phone with rotation
+        withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+            showPhone = true
+            phoneScale = 1.0
+            phoneRotation = 0
+        }
+        
+        // Add glow to phone
+        withAnimation(.easeInOut(duration: 1.2).delay(0.5)) {
+            phoneGlow = 8
+        }
+        
+        // Show cards with staggered animation
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            showCards = true
+            
+            // Animate first card
+            withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
                 card1Offset = -60
-                card2Offset = 0
-                card3Offset = 60
+                card1Rotation = 0
+                card1Scale = 1.0
+            }
+            
+            // Add glow to first card with delay
+            withAnimation(.easeInOut(duration: 1.0).delay(0.1)) {
+                cardGlows[0] = 8
+            }
+            
+            // Animate second card with delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                    card2Offset = 0
+                    card2Rotation = 0
+                    card2Scale = 1.0
+                }
+                
+                // Add glow to second card
+                withAnimation(.easeInOut(duration: 1.0).delay(0.1)) {
+                    cardGlows[1] = 8
+                }
+            }
+            
+            // Animate third card with delay
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
+                    card3Offset = 60
+                    card3Rotation = 0
+                    card3Scale = 1.0
+                }
+                
+                // Add glow to third card
+                withAnimation(.easeInOut(duration: 1.0).delay(0.1)) {
+                    cardGlows[2] = 8
+                }
+            }
+            
+            // Start hovering animation for cards
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
+                    cardsHovering = true
+                }
             }
         }
         
-        // Show live label
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+        // Show live label with enhanced effects
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
             withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
                 liveLabelScale = 1.0
                 liveLabelOpacity = 1.0
             }
             
-            // Start pulsating animation
+            // Add glow to LIVE label
+            withAnimation(.easeInOut(duration: 0.8).delay(0.3)) {
+                liveGlow = 10
+            }
+            
+            // Start pulsating animation for LIVE label
             withAnimation(Animation.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                 pulsate = true
+            }
+        }
+        
+        // Animate stats
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+            withAnimation(.spring(response: 0.6, dampingFraction: 0.7)) {
+                statsOpacity = 1.0
+                statsScale = 1.0
             }
         }
     }
