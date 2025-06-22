@@ -20,6 +20,9 @@ struct Card_Valuw_ScannerApp: App {
     // Shared subscription service
     @State private var subscriptionService = SubscriptionService()
     
+    // Onboarding manager
+    @StateObject private var onboardingManager = OnboardingManager()
+    
     // Scene phase for tracking app state
     @Environment(\.scenePhase) private var scenePhase
     
@@ -36,12 +39,17 @@ struct Card_Valuw_ScannerApp: App {
     
     var body: some Scene {
         WindowGroup {
+            if onboardingManager.hasCompletedOnboarding {
             MainTabView()
                 .preferredColorScheme(darkMode ? .dark : .light)
                 .environment(subscriptionService)
                 .task {
                     // Update subscription status when app launches
                     await subscriptionService.updateSubscriptionStatus()
+                    }
+            } else {
+                OnboardingView(isOnboardingCompleted: $onboardingManager.hasCompletedOnboarding)
+                    .preferredColorScheme(.dark) // Onboarding looks best in dark mode
                 }
         }
         .modelContainer(modelContainer)
