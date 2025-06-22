@@ -20,7 +20,7 @@ struct MainTabView: View {
     @State private var browseViewModel: BrowseViewModel
     
     // Subscription view model
-    @State private var subscriptionViewModel = SubscriptionViewModel()
+    @State private var subscriptionViewModel: SubscriptionViewModel
     
     // MARK: - Initialization
     
@@ -42,9 +42,15 @@ struct MainTabView: View {
         
         let tempPersistenceManager = PersistenceManager(modelContext: ModelContext(tempContainer))
         
-        // Initialize view models with shared persistence manager
+        // Create a shared subscription service for initialization
+        let tempSubscriptionService = SubscriptionService()
+        
+        // Create a subscription view model with the shared service
+        _subscriptionViewModel = State(initialValue: SubscriptionViewModel(subscriptionService: tempSubscriptionService))
+        
+        // Initialize view models with shared persistence manager and subscription service
         _scannerViewModel = State(initialValue: ScannerViewModel(cardScannerService: cardScannerService, pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
-        _collectionViewModel = State(initialValue: CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager, subscriptionService: SubscriptionService()))
+        _collectionViewModel = State(initialValue: CollectionViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager, subscriptionService: tempSubscriptionService))
         _browseViewModel = State(initialValue: BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: tempPersistenceManager))
     }
     
@@ -100,6 +106,12 @@ struct MainTabView: View {
             scannerViewModel.updatePersistenceManager(persistenceManager)
             collectionViewModel.updatePersistenceManager(persistenceManager)
             
+            // Update the subscription view model with the environment subscription service
+            subscriptionViewModel = SubscriptionViewModel(subscriptionService: subscriptionService)
+            
+            // Update the collection view model with the environment subscription service
+            collectionViewModel.updateSubscriptionService(subscriptionService)
+            
             // For browse view model, create a new instance with the correct persistence manager
             browseViewModel = BrowseViewModel(pokemonTCGService: pokemonTCGService, persistenceManager: persistenceManager)
             
@@ -107,13 +119,21 @@ struct MainTabView: View {
             if selectedTab == 2 {
                 collectionViewModel.loadCollection()
             }
+        }
+        .task {
+            // First, update the subscription status
+            await subscriptionService.updateSubscriptionStatus()
             
-            // Show subscription screen if user is not premium
+            // Then check if we should show the subscription screen
+            // This ensures we have the latest subscription status
             checkAndShowSubscription()
         }
         .onChange(of: subscriptionService.isPremium) { oldValue, newValue in
-            if !newValue {
-                // Show subscription screen if user becomes non-premium
+            if newValue {
+                // Hide subscription screen when user becomes premium
+                showingSubscriptions = false
+            } else if oldValue && !newValue {
+                // Only show subscription screen if user was premium and becomes non-premium
                 showingSubscriptions = true
             }
         }

@@ -48,12 +48,9 @@ struct Card_Valuw_ScannerApp: App {
                 .environment(subscriptionService)
                 .environment(appReviewService)
                 .task {
-                    // Update subscription status when app launches
-                    await subscriptionService.updateSubscriptionStatus()
-                    
                     // Check if we should request a review
                     appReviewService.requestReviewIfAppropriate()
-                    }
+                }
             } else {
                 OnboardingView(isOnboardingCompleted: $onboardingManager.hasCompletedOnboarding)
                     .preferredColorScheme(.dark) // Onboarding looks best in dark mode

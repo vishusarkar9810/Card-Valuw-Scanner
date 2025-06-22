@@ -357,6 +357,12 @@ struct SubscriptionView: View {
             }
         }
         .ignoresSafeArea()
+        .onChange(of: viewModel.isPremium) { oldValue, newValue in
+            if newValue {
+                // Dismiss the view when user becomes premium
+                isPresented = false
+            }
+        }
     }
     
     // MARK: - Animation Methods

@@ -80,6 +80,12 @@ final class CollectionViewModel {
         loadCollection()
     }
     
+    /// Update the subscription service reference
+    /// - Parameter subscriptionService: The new subscription service instance
+    func updateSubscriptionService(_ subscriptionService: SubscriptionService) {
+        self.subscriptionService = subscriptionService
+    }
+    
     /// Create a new collection
     func createCollection() {
         guard !newCollectionName.isEmpty else {
