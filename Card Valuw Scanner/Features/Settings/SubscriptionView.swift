@@ -18,6 +18,14 @@ struct SubscriptionView: View {
     @State private var giftScale: CGFloat = 1.0
     @State private var giftOpacity: Double = 1.0
     
+    // MARK: - Initialization
+    
+    // Add an initializer that accepts an optional binding
+    init(viewModel: SubscriptionViewModel, isPresented: Binding<Bool>) {
+        self._viewModel = State(initialValue: viewModel)
+        self._isPresented = isPresented
+    }
+    
     // MARK: - Body
     
     var body: some View {

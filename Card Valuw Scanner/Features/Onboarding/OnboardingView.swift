@@ -3,6 +3,8 @@ import SwiftUI
 struct OnboardingView: View {
     @Binding var isOnboardingCompleted: Bool
     @State private var currentPage = 0
+    @State private var showSubscription = false
+    @AppStorage("darkMode") private var darkMode = false
     
     // Define the brand red color
     private let brandRed = Color(hex: "#d80015")
@@ -84,8 +86,8 @@ struct OnboardingView: View {
                             currentPage += 1
                         }
                     } else {
-                        // Complete onboarding
-                        isOnboardingCompleted = true
+                        // Show subscription screen instead of completing onboarding
+                        showSubscription = true
                     }
                 }) {
                     Text(currentPage == 2 ? "Try for Free" : "Continue")
@@ -105,6 +107,16 @@ struct OnboardingView: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 0)
             }
+        }
+        .fullScreenCover(isPresented: $showSubscription) {
+            // When subscription view is dismissed, complete the onboarding
+            isOnboardingCompleted = true
+        } content: {
+            SubscriptionView(
+                viewModel: SubscriptionViewModel(),
+                isPresented: $showSubscription
+            )
+            .preferredColorScheme(darkMode ? .dark : .light) // Use system theme preference
         }
     }
 }

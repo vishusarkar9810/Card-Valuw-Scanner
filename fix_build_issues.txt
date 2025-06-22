@@ -1,0 +1,29 @@
+To fix the build issues:
+
+1. Create a new file in Card Valuw Scanner/Core/Utils/Extensions.swift with:
+```swift
+import SwiftUI
+
+// MARK: - Color Extensions
+
+extension Color {
+    static let brandRed = Color.red
+}
+```
+
+2. Add this file to the Xcode project:
+- Open the Xcode project
+- Right-click on the "Core/Utils" folder in the project navigator
+- Select "Add Files to 'Card Valuw Scanner'..."
+- Select the Extensions.swift file
+- Click "Add"
+
+3. Remove the Color extension from OnboardingView.swift:
+- Delete the entire Color extension at the bottom of the file
+- Replace all instances of Color(hex: "#d80015") with Color.brandRed
+- Replace any other hex color initializations with standard SwiftUI colors
+
+4. Update SubscriptionView.swift:
+- Replace Color(hex: "#d80015") with Color.brandRed
+
+5. Build and run the project
