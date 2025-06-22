@@ -4,6 +4,9 @@ struct OnboardingView: View {
     @Binding var isOnboardingCompleted: Bool
     @State private var currentPage = 0
     
+    // Define the brand red color
+    private let brandRed = Color(hex: "#d80015")
+    
     var body: some View {
         ZStack {
             // Background gradient
@@ -19,7 +22,7 @@ struct OnboardingView: View {
                 HStack(spacing: 15) {
                     // Search icon (red for first screen)
                     Circle()
-                        .fill(currentPage == 0 ? Color.red : Color.red.opacity(0.5))
+                        .fill(currentPage == 0 ? brandRed : brandRed.opacity(0.5))
                         .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "magnifyingglass")
@@ -29,12 +32,12 @@ struct OnboardingView: View {
                     
                     // Line connector
                     Rectangle()
-                        .fill(Color.red.opacity(0.5))
+                        .fill(brandRed.opacity(0.5))
                         .frame(height: 2)
                     
                     // Camera icon (red for second screen)
                     Circle()
-                        .fill(currentPage == 1 ? Color.red : Color.red.opacity(0.5))
+                        .fill(currentPage == 1 ? brandRed : brandRed.opacity(0.5))
                         .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "camera.fill")
@@ -44,12 +47,12 @@ struct OnboardingView: View {
                     
                     // Line connector
                     Rectangle()
-                        .fill(Color.red.opacity(0.5))
+                        .fill(brandRed.opacity(0.5))
                         .frame(height: 2)
                     
                     // Chart icon (red for third screen)
                     Circle()
-                        .fill(currentPage == 2 ? Color.red : Color.red.opacity(0.5))
+                        .fill(currentPage == 2 ? brandRed : brandRed.opacity(0.5))
                         .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "chart.bar.fill")
@@ -63,11 +66,11 @@ struct OnboardingView: View {
                 // Custom TabView with no swipe gesture
                 ZStack {
                     if currentPage == 0 {
-                        WelcomePageView()
+                        WelcomePageView(brandRed: brandRed)
                     } else if currentPage == 1 {
-                        ScanningPageView()
+                        ScanningPageView(brandRed: brandRed)
                     } else {
-                        LivePricesPageView()
+                        LivePricesPageView(brandRed: brandRed)
                     }
                 }
                 .padding(.horizontal)
@@ -90,7 +93,7 @@ struct OnboardingView: View {
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity)
                         .padding()
-                        .background(Color(hex: "#FF3B30")) // Bright red
+                        .background(brandRed) // Use brand red instead of #FF3B30
                         .cornerRadius(16)
                 }
                 .padding(.horizontal, 20)
@@ -117,6 +120,9 @@ struct WelcomePageView: View {
     @State private var userImageOpacity: Double = 0
     @State private var laurelLeftOffset: CGFloat = -50
     @State private var laurelRightOffset: CGFloat = 50
+    
+    // Brand red color passed from parent
+    let brandRed: Color
     
     var body: some View {
         VStack(spacing: 20) {
@@ -218,10 +224,10 @@ struct WelcomePageView: View {
             // Stats at bottom
             HStack {
                 Image(systemName: "person.2.fill")
-                    .foregroundColor(.red)
+                    .foregroundColor(brandRed)
                 Text("Trusted by 145,172+ Collectors")
                     .font(.system(size: 16))
-                    .foregroundColor(.red)
+                    .foregroundColor(brandRed)
             }
         }
         .onAppear {
@@ -280,6 +286,9 @@ struct ScanningPageView: View {
     @State private var scanFrameOpacity: Double = 0
     @State private var scanLinePosition: CGFloat = 0
     
+    // Brand red color passed from parent
+    let brandRed: Color
+    
     var body: some View {
         VStack(spacing: 20) {
             // Header
@@ -331,13 +340,13 @@ struct ScanningPageView: View {
                 
                 // Scanning frame
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color.red, lineWidth: 2)
+                    .stroke(brandRed, lineWidth: 2)
                     .frame(width: 100, height: 130)
                     .opacity(showScanFrame ? 1 : 0)
                 
                 // Scanning line
                 Rectangle()
-                    .fill(Color.red.opacity(0.6))
+                    .fill(brandRed.opacity(0.6))
                     .frame(width: 90, height: 2)
                     .offset(y: scanLinePosition)
                     .opacity(scanningInProgress ? 1 : 0)
@@ -355,10 +364,10 @@ struct ScanningPageView: View {
             // Stats at bottom
             HStack {
                 Image(systemName: "doc.viewfinder")
-                    .foregroundColor(.red)
+                    .foregroundColor(brandRed)
                 Text("Scan 17,825+ Cards")
                     .font(.system(size: 16))
-                    .foregroundColor(.red)
+                    .foregroundColor(brandRed)
             }
         }
         .onAppear {
@@ -440,6 +449,9 @@ struct LivePricesPageView: View {
     @State private var cardsHovering = false
     @State private var liveGlow: CGFloat = 0
     
+    // Brand red color passed from parent
+    let brandRed: Color
+    
     var body: some View {
         VStack(spacing: 20) {
             // Header
@@ -488,14 +500,14 @@ struct LivePricesPageView: View {
                 ZStack {
                     // Outer glow for LIVE label
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.red.opacity(0.3))
+                        .fill(brandRed.opacity(0.3))
                         .frame(width: 90, height: 50)
                         .blur(radius: liveGlow)
                         .scaleEffect(pulsate ? 1.2 : 1.0)
                     
                     // LIVE label
                     RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.red)
+                        .fill(brandRed)
                         .frame(width: 80, height: 40)
                         .overlay(
                             Text("LIVE")
@@ -561,10 +573,10 @@ struct LivePricesPageView: View {
             // Stats with animation
             Text("Over 77,678+ Sales Tracked")
                 .font(.system(size: 16))
-                .foregroundColor(.red)
+                .foregroundColor(brandRed)
                 .opacity(statsOpacity)
                 .scaleEffect(statsScale)
-                .shadow(color: .red.opacity(0.5), radius: statsOpacity > 0.5 ? 5 : 0)
+                .shadow(color: brandRed.opacity(0.5), radius: statsOpacity > 0.5 ? 5 : 0)
         }
         .onAppear {
             startAnimations()
