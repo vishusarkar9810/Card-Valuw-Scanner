@@ -19,6 +19,9 @@ struct MainTabView: View {
     @State private var collectionViewModel: CollectionViewModel
     @State private var browseViewModel: BrowseViewModel
     
+    // Subscription view model
+    @State private var subscriptionViewModel = SubscriptionViewModel()
+    
     // MARK: - Initialization
     
     @MainActor
@@ -86,6 +89,9 @@ struct MainTabView: View {
                 }
                 .tag(3)
         }
+        .fullScreenCover(isPresented: $showingSubscriptions) {
+            SubscriptionView(viewModel: subscriptionViewModel, isPresented: $showingSubscriptions)
+        }
         .onAppear {
             // Update the persistence manager with the injected model context
             let persistenceManager = PersistenceManager(modelContext: modelContext)
@@ -100,6 +106,27 @@ struct MainTabView: View {
             // Preload the data for collection view on app start
             if selectedTab == 2 {
                 collectionViewModel.loadCollection()
+            }
+            
+            // Show subscription screen if user is not premium
+            checkAndShowSubscription()
+        }
+        .onChange(of: subscriptionService.isPremium) { oldValue, newValue in
+            if !newValue {
+                // Show subscription screen if user becomes non-premium
+                showingSubscriptions = true
+            }
+        }
+    }
+    
+    // MARK: - Helper Methods
+    
+    private func checkAndShowSubscription() {
+        // Only show subscription screen if user is not premium
+        if !subscriptionService.isPremium {
+            // Create a slight delay to ensure the app is fully loaded
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                showingSubscriptions = true
             }
         }
     }

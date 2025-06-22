@@ -9,7 +9,8 @@ struct SubscriptionView: View {
     @Environment(\.presentationMode) private var presentationMode
     @Binding var isPresented: Bool
     
-    private let accentColor = Color.red
+    // Use the brand red color for consistency
+    private let accentColor = Color(hex: "#d80015")
     
     // Animation states
     @State private var isAnimating = false
@@ -18,21 +19,13 @@ struct SubscriptionView: View {
     @State private var giftScale: CGFloat = 1.0
     @State private var giftOpacity: Double = 1.0
     
-    // MARK: - Initialization
-    
-    // Add an initializer that accepts an optional binding
-    init(viewModel: SubscriptionViewModel, isPresented: Binding<Bool>) {
-        self._viewModel = State(initialValue: viewModel)
-        self._isPresented = isPresented
-    }
-    
     // MARK: - Body
     
     var body: some View {
         ZStack {
-            // Background color
+            // Background color - use system background for proper appearance
             Color(.systemBackground)
-                .edgesIgnoringSafeArea(.all)
+                .ignoresSafeArea()
             
             // Content
             ScrollView {
@@ -81,7 +74,7 @@ struct SubscriptionView: View {
                                 .opacity(isAnimating ? 1 : 0)
                         }
                         .frame(height: 200) // Fixed height container to prevent layout shifts
-                        .padding(.top, 20) // Reduced top padding
+                        .padding(.top, 40) // Increased top padding for full-screen mode
                         .onAppear {
                             startAnimation()
                         }
@@ -90,7 +83,7 @@ struct SubscriptionView: View {
                             .font(.system(size: 32, weight: .bold))
                             .multilineTextAlignment(.center)
                     }
-                    .padding(.bottom, 20) // Reduced bottom padding
+                    .padding(.bottom, 20)
                     
                     // Features list
                     VStack(alignment: .leading, spacing: 22) {
@@ -328,13 +321,8 @@ struct SubscriptionView: View {
                     .padding(.bottom, 40)
                 }
             }
-            .edgesIgnoringSafeArea(.all)
-            .onAppear {
-                // Ensure toggle and selected plan are in sync when view appears
-                viewModel.isTrialEnabled = (viewModel.selectedPlan == .trial)
-                
-                // Debug the trial duration
-                print("Trial duration from viewModel: \(viewModel.trialDuration)")
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 0)
             }
             
             // Close button (top right)
@@ -346,28 +334,29 @@ struct SubscriptionView: View {
                     } label: {
                         Image(systemName: "xmark")
                             .font(.system(size: 17, weight: .bold))
-                            .foregroundColor(.black)
+                            .foregroundColor(.primary)
                             .frame(width: 36, height: 36)
                             .background(Color(.systemGray6).opacity(0.8))
                             .clipShape(Circle())
-                            .padding(.top, 50) // Increased padding for better visibility
                     }
                     .padding(.trailing, 16)
+                    .padding(.top, 10)
                 }
                 Spacer()
             }
+            .padding(.top, 44) // Add padding for the status bar area
             
             // Loading overlay
             if viewModel.isLoading {
                 Color.black.opacity(0.2)
-                    .edgesIgnoringSafeArea(.all)
+                    .ignoresSafeArea()
                     .overlay(
                         ProgressView()
                             .scaleEffect(1.5)
                     )
             }
         }
-        .edgesIgnoringSafeArea(.all)
+        .ignoresSafeArea()
     }
     
     // MARK: - Animation Methods

@@ -49,7 +49,7 @@ struct Card_Valuw_ScannerApp: App {
                     }
             } else {
                 OnboardingView(isOnboardingCompleted: $onboardingManager.hasCompletedOnboarding)
-                    .preferredColorScheme(darkMode ? .dark : .light) // Use system theme preference
+                    .preferredColorScheme(.dark) // Onboarding looks best in dark mode
                     .ignoresSafeArea(.keyboard) // Only ignore keyboard, not safe areas for notch/home indicator
                 }
         }
