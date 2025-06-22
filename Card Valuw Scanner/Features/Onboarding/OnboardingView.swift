@@ -16,14 +16,15 @@ struct OnboardingView: View {
             
             VStack {
                 // Navigation dots at the top
-                HStack(spacing: 20) {
+                HStack(spacing: 15) {
                     // Search icon (red for first screen)
                     Circle()
                         .fill(currentPage == 0 ? Color.red : Color.red.opacity(0.5))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "magnifyingglass")
                                 .foregroundColor(.white)
+                                .font(.system(size: 16))
                         )
                     
                     // Line connector
@@ -34,10 +35,11 @@ struct OnboardingView: View {
                     // Camera icon (red for second screen)
                     Circle()
                         .fill(currentPage == 1 ? Color.red : Color.red.opacity(0.5))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "camera.fill")
                                 .foregroundColor(.white)
+                                .font(.system(size: 16))
                         )
                     
                     // Line connector
@@ -48,29 +50,27 @@ struct OnboardingView: View {
                     // Chart icon (red for third screen)
                     Circle()
                         .fill(currentPage == 2 ? Color.red : Color.red.opacity(0.5))
-                        .frame(width: 40, height: 40)
+                        .frame(width: 36, height: 36)
                         .overlay(
                             Image(systemName: "chart.bar.fill")
                                 .foregroundColor(.white)
+                                .font(.system(size: 16))
                         )
                 }
-                .padding(.top, 50)
-                .padding(.bottom, 20)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 10)
                 
-                TabView(selection: $currentPage) {
-                    // First page - Welcome with testimonial
-                    WelcomePageView()
-                        .tag(0)
-                    
-                    // Second page - Card scanning
-                    ScanningPageView()
-                        .tag(1)
-                    
-                    // Third page - Live eBay prices
-                    LivePricesPageView()
-                        .tag(2)
+                // Custom TabView with no swipe gesture
+                ZStack {
+                    if currentPage == 0 {
+                        WelcomePageView()
+                    } else if currentPage == 1 {
+                        ScanningPageView()
+                    } else {
+                        LivePricesPageView()
+                    }
                 }
-                .tabViewStyle(PageTabViewStyle(indexDisplayMode: .never))
+                .padding(.horizontal)
                 
                 Spacer()
                 
@@ -94,7 +94,13 @@ struct OnboardingView: View {
                         .cornerRadius(16)
                 }
                 .padding(.horizontal, 20)
-                .padding(.bottom, 40)
+                .padding(.bottom)
+            }
+            .safeAreaInset(edge: .top) {
+                Color.clear.frame(height: 0)
+            }
+            .safeAreaInset(edge: .bottom) {
+                Color.clear.frame(height: 0)
             }
         }
     }
@@ -113,23 +119,23 @@ struct WelcomePageView: View {
     @State private var laurelRightOffset: CGFloat = 50
     
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
+        VStack(spacing: 20) {
             // Header
             Text("Welcome to Card\nValue Scanner")
-                .font(.system(size: 40, weight: .bold))
+                .font(.system(size: 34, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-                .padding(.bottom, 10)
+                .padding(.top)
+                .fixedSize(horizontal: false, vertical: true)
             
             // Subtitle
             Text("The most accurate and efficient way to\nunofficially track your pokemon collection")
-                .font(.system(size: 18))
+                .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .fixedSize(horizontal: false, vertical: true)
             
             Spacer()
             
@@ -150,12 +156,12 @@ struct WelcomePageView: View {
                     .opacity(userImageOpacity)
                 
                 // Laurel leaves
-                HStack(spacing: 200) {
+                HStack(spacing: 160) {
                     // Left laurel
                     Image(systemName: "laurel.leading")
                         .resizable()
                         .scaledToFit()
-                        .frame(height: 120)
+                        .frame(height: 100)
                         .foregroundColor(.white)
                         .offset(x: laurelLeftOffset)
                         .opacity(showStars ? 1 : 0)
@@ -164,7 +170,7 @@ struct WelcomePageView: View {
                     Image(systemName: "laurel.trailing")
                         .resizable()
                         .scaledToFit()
-                        .frame(height: 120)
+                        .frame(height: 100)
                         .foregroundColor(.white)
                         .offset(x: laurelRightOffset)
                         .opacity(showStars ? 1 : 0)
@@ -217,7 +223,6 @@ struct WelcomePageView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.red)
             }
-            .padding(.bottom)
         }
         .onAppear {
             startAnimations()
@@ -276,23 +281,23 @@ struct ScanningPageView: View {
     @State private var scanLinePosition: CGFloat = 0
     
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
+        VStack(spacing: 20) {
             // Header
             Text("Snap a Photo to\nTrack Your Cards")
-                .font(.system(size: 40, weight: .bold))
+                .font(.system(size: 34, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-                .padding(.bottom, 10)
+                .padding(.top)
+                .fixedSize(horizontal: false, vertical: true)
             
             // Subtitle
             Text("Quickly scan your cards to get prices,\ncertified population, pull rates and more!")
-                .font(.system(size: 18))
+                .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
+                .fixedSize(horizontal: false, vertical: true)
             
             Spacer()
             
@@ -301,14 +306,14 @@ struct ScanningPageView: View {
                 // Phone outline
                 RoundedRectangle(cornerRadius: 30)
                     .stroke(Color.white, lineWidth: 3)
-                    .frame(width: 200, height: 400)
+                    .frame(width: 160, height: 320)
                     .scaleEffect(phoneScale)
                     .opacity(showPhone ? 1 : 0)
                 
                 // Phone screen
                 RoundedRectangle(cornerRadius: 25)
                     .fill(Color.black)
-                    .frame(width: 190, height: 380)
+                    .frame(width: 150, height: 300)
                     .scaleEffect(phoneScale)
                     .opacity(showPhone ? 1 : 0)
                 
@@ -319,7 +324,7 @@ struct ScanningPageView: View {
                         startPoint: .topLeading,
                         endPoint: .bottomTrailing
                     ))
-                    .frame(width: 120, height: 160)
+                    .frame(width: 90, height: 120)
                     .shadow(color: .white.opacity(0.5), radius: 10)
                     .offset(y: cardOffset)
                     .opacity(showCard ? 1 : 0)
@@ -327,13 +332,13 @@ struct ScanningPageView: View {
                 // Scanning frame
                 RoundedRectangle(cornerRadius: 8)
                     .stroke(Color.red, lineWidth: 2)
-                    .frame(width: 130, height: 170)
+                    .frame(width: 100, height: 130)
                     .opacity(showScanFrame ? 1 : 0)
                 
                 // Scanning line
                 Rectangle()
                     .fill(Color.red.opacity(0.6))
-                    .frame(width: 120, height: 2)
+                    .frame(width: 90, height: 2)
                     .offset(y: scanLinePosition)
                     .opacity(scanningInProgress ? 1 : 0)
                 
@@ -343,7 +348,7 @@ struct ScanningPageView: View {
                     .foregroundColor(.green)
                     .opacity(scanComplete ? 1 : 0)
             }
-            .frame(height: 400)
+            .frame(height: 350)
             
             Spacer()
             
@@ -355,7 +360,6 @@ struct ScanningPageView: View {
                     .font(.system(size: 16))
                     .foregroundColor(.red)
             }
-            .padding(.bottom)
         }
         .onAppear {
             startAnimations()
@@ -392,7 +396,7 @@ struct ScanningPageView: View {
                 
                 // Animate scan line
                 withAnimation(Animation.easeInOut(duration: 1.5).repeatForever(autoreverses: true)) {
-                    scanLinePosition = 70
+                    scanLinePosition = 50
                 }
                 
                 // Show scan complete
@@ -437,27 +441,27 @@ struct LivePricesPageView: View {
     @State private var liveGlow: CGFloat = 0
     
     var body: some View {
-        VStack(spacing: 30) {
-            Spacer()
-            
+        VStack(spacing: 20) {
             // Header
             Text("Unlock Live\neBay Prices")
-                .font(.system(size: 40, weight: .bold))
+                .font(.system(size: 34, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
-                .padding(.bottom, 10)
+                .padding(.top)
                 .offset(y: headerOffset)
                 .blur(radius: showPhone ? 0 : 10)
+                .fixedSize(horizontal: false, vertical: true)
             
             // Subtitle
             Text("Maximize your collection's value with real-\ntime insights from eBay (Subscription\nrequired)")
-                .font(.system(size: 18))
+                .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
                 .padding(.horizontal)
                 .offset(y: subtitleOffset)
                 .blur(radius: showPhone ? 0 : 5)
+                .fixedSize(horizontal: false, vertical: true)
             
             Spacer()
             
@@ -466,7 +470,7 @@ struct LivePricesPageView: View {
                 // Phone outline with glow effect
                 RoundedRectangle(cornerRadius: 30)
                     .stroke(Color.white, lineWidth: 3)
-                    .frame(width: 180, height: 360)
+                    .frame(width: 160, height: 320)
                     .scaleEffect(phoneScale)
                     .rotationEffect(Angle(degrees: phoneRotation))
                     .opacity(showPhone ? 1 : 0)
@@ -475,7 +479,7 @@ struct LivePricesPageView: View {
                 // Phone screen
                 RoundedRectangle(cornerRadius: 25)
                     .fill(Color.black)
-                    .frame(width: 170, height: 340)
+                    .frame(width: 150, height: 300)
                     .scaleEffect(phoneScale)
                     .rotationEffect(Angle(degrees: phoneRotation))
                     .opacity(showPhone ? 1 : 0)
@@ -501,7 +505,7 @@ struct LivePricesPageView: View {
                         )
                         .scaleEffect(pulsate ? 1.1 : 1.0)
                 }
-                .position(x: 70, y: 120)
+                .position(x: 60, y: 100)
                 .scaleEffect(liveLabelScale)
                 .opacity(liveLabelOpacity)
                 
@@ -514,7 +518,7 @@ struct LivePricesPageView: View {
                             startPoint: .top,
                             endPoint: .bottom
                         ))
-                        .frame(width: 80, height: 120)
+                        .frame(width: 70, height: 100)
                         .shadow(color: .yellow.opacity(0.7), radius: cardGlows[0])
                         .offset(x: card1Offset, y: cardsHovering ? -5 : 0)
                         .rotationEffect(Angle(degrees: card1Rotation))
@@ -528,7 +532,7 @@ struct LivePricesPageView: View {
                             startPoint: .top,
                             endPoint: .bottom
                         ))
-                        .frame(width: 80, height: 120)
+                        .frame(width: 70, height: 100)
                         .shadow(color: .blue.opacity(0.7), radius: cardGlows[1])
                         .offset(x: card2Offset, y: cardsHovering ? -10 : 0)
                         .rotationEffect(Angle(degrees: card2Rotation))
@@ -542,7 +546,7 @@ struct LivePricesPageView: View {
                             startPoint: .top,
                             endPoint: .bottom
                         ))
-                        .frame(width: 80, height: 120)
+                        .frame(width: 70, height: 100)
                         .shadow(color: .green.opacity(0.7), radius: cardGlows[2])
                         .offset(x: card3Offset, y: cardsHovering ? -5 : 0)
                         .rotationEffect(Angle(degrees: card3Rotation))
@@ -550,7 +554,7 @@ struct LivePricesPageView: View {
                         .opacity(showCards ? 1 : 0)
                 }
             }
-            .frame(height: 400)
+            .frame(height: 350)
             
             Spacer()
             
@@ -558,7 +562,6 @@ struct LivePricesPageView: View {
             Text("Over 77,678+ Sales Tracked")
                 .font(.system(size: 16))
                 .foregroundColor(.red)
-                .padding(.bottom)
                 .opacity(statsOpacity)
                 .scaleEffect(statsScale)
                 .shadow(color: .red.opacity(0.5), radius: statsOpacity > 0.5 ? 5 : 0)
@@ -596,7 +599,7 @@ struct LivePricesPageView: View {
             
             // Animate first card
             withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
-                card1Offset = -60
+                card1Offset = -50
                 card1Rotation = 0
                 card1Scale = 1.0
             }
@@ -623,7 +626,7 @@ struct LivePricesPageView: View {
             // Animate third card with delay
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 withAnimation(.spring(response: 0.8, dampingFraction: 0.7)) {
-                    card3Offset = 60
+                    card3Offset = 50
                     card3Rotation = 0
                     card3Scale = 1.0
                 }
