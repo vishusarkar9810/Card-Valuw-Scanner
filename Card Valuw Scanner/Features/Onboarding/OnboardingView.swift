@@ -3,6 +3,8 @@ import SwiftUI
 struct OnboardingView: View {
     @Binding var isOnboardingCompleted: Bool
     @State private var currentPage = 0
+    @State private var showReviewPrompt = false
+    @Environment(\.appReviewService) private var appReviewService
     
     // Define the brand red color
     private let brandRed = Color(hex: "#d80015")
@@ -84,8 +86,8 @@ struct OnboardingView: View {
                             currentPage += 1
                         }
                     } else {
-                        // Complete onboarding
-                        isOnboardingCompleted = true
+                        // Show review prompt before completing onboarding
+                        showReviewPrompt = true
                     }
                 }) {
                     Text(currentPage == 2 ? "Try for Free" : "Continue")
@@ -105,6 +107,99 @@ struct OnboardingView: View {
             .safeAreaInset(edge: .bottom) {
                 Color.clear.frame(height: 0)
             }
+            
+            // Review prompt alert
+            if showReviewPrompt {
+                Color.black.opacity(0.5)
+                    .ignoresSafeArea()
+                    .transition(.opacity)
+                
+                ReviewPromptView(brandRed: brandRed, showReviewPrompt: $showReviewPrompt, isOnboardingCompleted: $isOnboardingCompleted)
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+    }
+}
+
+// Review Prompt View
+struct ReviewPromptView: View {
+    let brandRed: Color
+    @Binding var showReviewPrompt: Bool
+    @Binding var isOnboardingCompleted: Bool
+    @Environment(\.appReviewService) private var appReviewService
+    
+    @State private var isAnimating = false
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            // Star icon
+            Image(systemName: "star.fill")
+                .font(.system(size: 60))
+                .foregroundColor(.yellow)
+                .scaleEffect(isAnimating ? 1.2 : 0.8)
+                .animation(Animation.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isAnimating)
+            
+            // Title
+            Text("Enjoying Card Value Scanner?")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+            
+            // Description
+            Text("We'd love to hear your feedback! Would you mind taking a moment to rate our app?")
+                .font(.body)
+                .foregroundColor(.white.opacity(0.8))
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            // Buttons
+            HStack(spacing: 15) {
+                // Not Now button
+                Button(action: {
+                    withAnimation {
+                        showReviewPrompt = false
+                        isOnboardingCompleted = true
+                    }
+                }) {
+                    Text("Not Now")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(Color.gray.opacity(0.3))
+                        .cornerRadius(16)
+                }
+                
+                // Rate Now button
+                Button(action: {
+                    // Request app review
+                    appReviewService.requestReviewDuringOnboarding(force: true)
+                    
+                    // Complete onboarding
+                    withAnimation {
+                        showReviewPrompt = false
+                        isOnboardingCompleted = true
+                    }
+                }) {
+                    Text("Rate Now")
+                        .font(.headline)
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .background(brandRed)
+                        .cornerRadius(16)
+                }
+            }
+            .padding(.horizontal)
+        }
+        .padding()
+        .background(Color(hex: "#220033").opacity(0.95))
+        .cornerRadius(20)
+        .shadow(color: .black.opacity(0.5), radius: 20)
+        .frame(width: 320)
+        .onAppear {
+            isAnimating = true
         }
     }
 }

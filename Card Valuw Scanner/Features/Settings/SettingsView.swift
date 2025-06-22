@@ -4,6 +4,7 @@ struct SettingsView: View {
     // MARK: - Properties
     
     @Environment(\.subscriptionService) private var subscriptionService
+    @Environment(\.appReviewService) private var appReviewService
     @AppStorage("darkMode") private var darkMode = false
     @State private var showingSubscriptions = false
     
@@ -42,6 +43,10 @@ struct SettingsView: View {
                         Spacer()
                         Text("1.0.0")
                             .foregroundColor(.secondary)
+                    }
+                    
+                    Button("Rate the App") {
+                        appReviewService.requestReviewManually()
                     }
                     
                     Button("Privacy Policy") {
@@ -175,7 +180,7 @@ struct TermsOfServiceView: View {
                     
                     Text("For the full terms of service, please visit:")
                     
-                    Link("Full Terms of Service", destination: URL(string: "https://pokemoncardscanner.com/terms")!)
+                    Link("Full Terms of Service", destination: URL(string: "https://aztty.com/terms-of-use/")!)
                         .foregroundColor(.blue)
                     
                     Spacer()

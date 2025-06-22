@@ -299,7 +299,7 @@ struct SubscriptionView: View {
                     // Terms and Privacy
                     HStack(spacing: 5) {
                         Button("Terms of Use") {
-                            if let url = URL(string: "https://aztty.com/terms") {
+                            if let url = URL(string: "https://aztty.com/terms-of-use/") {
                                 UIApplication.shared.open(url)
                             }
                         }
@@ -311,7 +311,7 @@ struct SubscriptionView: View {
                             .foregroundColor(.secondary)
                         
                         Button("Privacy Policy") {
-                            if let url = URL(string: "https://aztty.com/privacy") {
+                            if let url = URL(string: "https://aztty.com/privacy-policy-4/") {
                                 UIApplication.shared.open(url)
                             }
                         }
