@@ -115,6 +115,8 @@ struct ScannerView: View {
                     Task {
                         await model.processImage(image)
                         showResults = true
+                        // Reset capturedImage to nil after processing to allow subsequent scans
+                        capturedImage = nil
                     }
                 }
             }
