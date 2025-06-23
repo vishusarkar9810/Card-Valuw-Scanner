@@ -150,7 +150,16 @@ final class BrowseViewModel {
         // Get the default collection
         let collections = persistenceManager.fetchAllCollections()
         if let defaultCollection = collections.first(where: { $0.isDefault }) ?? collections.first {
-            let _ = persistenceManager.addCard(card, to: defaultCollection)
+            let cardEntity = persistenceManager.addCard(card, to: defaultCollection)
+            
+            // Ensure the card has a price
+            if cardEntity.currentPrice == nil {
+                // Try to set a price from cardmarket if tcgplayer prices are not available
+                if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
+                    cardEntity.currentPrice = marketPrice
+                    persistenceManager.updateCard(cardEntity)
+                }
+            }
         }
     }
 } 

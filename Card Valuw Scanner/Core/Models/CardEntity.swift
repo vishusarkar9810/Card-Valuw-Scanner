@@ -76,7 +76,9 @@ final class CardEntity {
             artist: nil, // Add this if available in Card model
             currentPrice: card.tcgplayer?.prices?.normal?.market ?? 
                          card.tcgplayer?.prices?.holofoil?.market ?? 
-                         card.tcgplayer?.prices?.reverseHolofoil?.market
+                         card.tcgplayer?.prices?.reverseHolofoil?.market ??
+                         card.cardmarket?.prices?.averageSellPrice ??
+                         card.cardmarket?.prices?.trendPrice
         )
     }
 }

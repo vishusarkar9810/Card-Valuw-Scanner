@@ -144,6 +144,10 @@ final class CollectionViewModel {
     func selectCollection(_ collection: CollectionEntity) {
         selectedCollection = collection
         cardEntities = Array(collection.cards)
+        
+        // Recalculate the collection value for the newly selected collection
+        calculateTotalCollectionValue()
+        
         applyFilters()
     }
     
@@ -166,6 +170,9 @@ final class CollectionViewModel {
                 createDefaultCollection()
             }
             
+            // Explicitly calculate the total collection value
+            calculateTotalCollectionValue()
+            
             isLoading = false
             shouldRefresh = false
         } catch {
@@ -175,12 +182,16 @@ final class CollectionViewModel {
     }
     
     /// Calculate the total value of all cards in the collection
-    private func calculateTotalCollectionValue() {
+    func calculateTotalCollectionValue() {
         totalCollectionValue = 0.0
         
-        for entity in cardEntities {
-            let cardPrice = entity.currentPrice ?? 0.0
-            totalCollectionValue += (cardPrice * Double(entity.quantity))
+        // Only calculate the value for cards in the currently selected collection
+        if let selectedCollection = selectedCollection {
+            // Use the cards from the selected collection only
+            for entity in selectedCollection.cards {
+                let cardPrice = entity.currentPrice ?? 0.0
+                totalCollectionValue += (cardPrice * Double(entity.quantity))
+            }
         }
         
         // If no filters are applied, set displayed value to total value
@@ -276,11 +287,14 @@ final class CollectionViewModel {
         // Get filtered card IDs
         let filteredCardIds = filteredCards.map { $0.id }
         
-        // Sum up the values of filtered cards
-        for entity in cardEntities {
-            if filteredCardIds.contains(entity.id) {
-                let cardPrice = entity.currentPrice ?? 0.0
-                displayedCollectionValue += (cardPrice * Double(entity.quantity))
+        // Only use cards from the currently selected collection
+        if let selectedCollection = selectedCollection {
+            // Sum up the values of filtered cards that are in the selected collection
+            for entity in selectedCollection.cards {
+                if filteredCardIds.contains(entity.id) {
+                    let cardPrice = entity.currentPrice ?? 0.0
+                    displayedCollectionValue += (cardPrice * Double(entity.quantity))
+                }
             }
         }
     }
@@ -409,5 +423,34 @@ final class CollectionViewModel {
         defaultCollection.isDefault = true
         collections = [defaultCollection]
         selectCollection(defaultCollection)
+    }
+    
+    // MARK: - Price Updates
+    
+    /// Update prices for cards that have nil prices
+    func updateMissingPrices() {
+        var updated = false
+        
+        for entity in cardEntities {
+            if entity.currentPrice == nil {
+                // Convert CardEntity back to Card to access API data
+                let card = entity.toCard()
+                
+                // Try to set a price from cardmarket if tcgplayer prices are not available
+                if let price = card.tcgplayer?.prices?.normal?.market ?? 
+                               card.tcgplayer?.prices?.holofoil?.market ?? 
+                               card.tcgplayer?.prices?.reverseHolofoil?.market ??
+                               card.cardmarket?.prices?.averageSellPrice ?? 
+                               card.cardmarket?.prices?.trendPrice {
+                    entity.currentPrice = price
+                    persistenceManager.updateCard(entity)
+                    updated = true
+                }
+            }
+        }
+        
+        if updated {
+            calculateTotalCollectionValue()
+        }
     }
 } 

@@ -166,7 +166,16 @@ import SwiftUI
             }
         } else if let favoritesCollection = favoritesCollection {
             // Add the card to the favorites collection
-            let _ = persistenceManager.addCard(card, to: favoritesCollection)
+            let cardEntity = persistenceManager.addCard(card, to: favoritesCollection)
+            
+            // Ensure the card has a price
+            if cardEntity.currentPrice == nil {
+                // Try to set a price from cardmarket if tcgplayer prices are not available
+                if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
+                    cardEntity.currentPrice = marketPrice
+                    persistenceManager.updateCard(cardEntity)
+                }
+            }
         }
     }
 } 

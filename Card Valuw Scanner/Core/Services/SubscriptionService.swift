@@ -318,7 +318,7 @@ extension SubscriptionService {
 
 enum PremiumFeature: String, CaseIterable {
     case marketAnalysis = "Indepth market analysis"
-    case livePrices = "Live eBay prices & sale trends"
+    case livePrices = "Live Card prices & sale trends"
     case gradedValuations = "Valuations by grade & edition"
     case unlimitedCollections = "Add unlimited collections"
     

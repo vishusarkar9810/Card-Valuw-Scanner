@@ -119,6 +119,9 @@ struct MainTabView: View {
             if selectedTab == 2 {
                 collectionViewModel.loadCollection()
             }
+            
+            // Set up notification observers for tab switching
+            setupNotificationObservers()
         }
         .task {
             // First, update the subscription status
@@ -140,6 +143,25 @@ struct MainTabView: View {
     }
     
     // MARK: - Helper Methods
+    
+    private func setupNotificationObservers() {
+        // Observe tab switching notifications from collection view
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("SwitchToScannerTab"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            selectedTab = 0 // Switch to Scanner tab
+        }
+        
+        NotificationCenter.default.addObserver(
+            forName: Notification.Name("SwitchToBrowseTab"),
+            object: nil,
+            queue: .main
+        ) { _ in
+            selectedTab = 1 // Switch to Browse tab
+        }
+    }
     
     private func checkAndShowSubscription() {
         // Only show subscription screen if user is not premium

@@ -550,7 +550,7 @@ struct LivePricesPageView: View {
     var body: some View {
         VStack(spacing: 20) {
             // Header
-            Text("Unlock Live\neBay Prices")
+            Text("Unlock Live\nMarket Prices")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundColor(.white)
                 .multilineTextAlignment(.center)
@@ -561,7 +561,7 @@ struct LivePricesPageView: View {
                 .fixedSize(horizontal: false, vertical: true)
             
             // Subtitle
-            Text("Maximize your collection's value with real-\ntime insights from eBay (Subscription\nrequired)")
+            Text("Maximize your collection's value with real-\ntime insights from Card Market (Subscription\nrequired)")
                 .font(.system(size: 16))
                 .foregroundColor(.white.opacity(0.8))
                 .multilineTextAlignment(.center)
