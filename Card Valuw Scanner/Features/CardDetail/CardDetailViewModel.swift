@@ -152,9 +152,8 @@ import SwiftUI
     // MARK: - Collection Management
     
     func toggleFavorite() {
-        // Find the default collection (Favorites)
+        // Get all collections
         let collections = persistenceManager.fetchAllCollections()
-        let favoritesCollection = collections.first { $0.isDefault } ?? collections.first
         
         if isFavorite {
             // Find the card in collections and remove it
@@ -164,16 +163,31 @@ import SwiftUI
                     persistenceManager.updateCollection(collection)
                 }
             }
-        } else if let favoritesCollection = favoritesCollection {
-            // Add the card to the favorites collection
-            let cardEntity = persistenceManager.addCard(card, to: favoritesCollection)
-            
-            // Ensure the card has a price
-            if cardEntity.currentPrice == nil {
-                // Try to set a price from cardmarket if tcgplayer prices are not available
-                if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
-                    cardEntity.currentPrice = marketPrice
-                    persistenceManager.updateCard(cardEntity)
+        } else {
+            // Find the "Favorites" collection (default collection)
+            if let favoritesCollection = collections.first(where: { $0.isDefault }) {
+                // Add the card to the Favorites collection
+                let cardEntity = persistenceManager.addCard(card, to: favoritesCollection)
+                
+                // Ensure the card has a price
+                if cardEntity.currentPrice == nil {
+                    // Try to set a price from cardmarket if tcgplayer prices are not available
+                    if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
+                        cardEntity.currentPrice = marketPrice
+                        persistenceManager.updateCard(cardEntity)
+                    }
+                }
+            } else if let firstCollection = collections.first {
+                // Fallback to first collection if no default collection exists
+                let cardEntity = persistenceManager.addCard(card, to: firstCollection)
+                
+                // Ensure the card has a price
+                if cardEntity.currentPrice == nil {
+                    // Try to set a price from cardmarket if tcgplayer prices are not available
+                    if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
+                        cardEntity.currentPrice = marketPrice
+                        persistenceManager.updateCard(cardEntity)
+                    }
                 }
             }
         }

@@ -147,10 +147,25 @@ final class BrowseViewModel {
     /// Add a card to the user's collection
     /// - Parameter card: The card to add
     func addCardToCollection(_ card: Card) {
-        // Get the default collection
+        // Get all collections
         let collections = persistenceManager.fetchAllCollections()
-        if let defaultCollection = collections.first(where: { $0.isDefault }) ?? collections.first {
-            let cardEntity = persistenceManager.addCard(card, to: defaultCollection)
+        
+        // Find the "My Collection" collection (non-default)
+        if let myCollection = collections.first(where: { $0.name == "My Collection" && !$0.isDefault }) {
+            // Add the card to the "My Collection" collection
+            let cardEntity = persistenceManager.addCard(card, to: myCollection)
+            
+            // Ensure the card has a price
+            if cardEntity.currentPrice == nil {
+                // Try to set a price from cardmarket if tcgplayer prices are not available
+                if let marketPrice = card.cardmarket?.prices?.averageSellPrice ?? card.cardmarket?.prices?.trendPrice {
+                    cardEntity.currentPrice = marketPrice
+                    persistenceManager.updateCard(cardEntity)
+                }
+            }
+        } else if let nonDefaultCollection = collections.first(where: { !$0.isDefault }) {
+            // Fallback to any non-default collection if "My Collection" doesn't exist
+            let cardEntity = persistenceManager.addCard(card, to: nonDefaultCollection)
             
             // Ensure the card has a price
             if cardEntity.currentPrice == nil {
