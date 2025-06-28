@@ -92,8 +92,8 @@ final class ScannerViewModel {
             
             // Check if we have a high-confidence name extraction
             if let cardName = cardInfo["name"], let confidenceStr = cardInfo["nameConfidence"], 
-               let confidence = Float(confidenceStr), confidence > 7.0 {
-                // High confidence name extraction - prioritize this search
+               let confidence = Float(confidenceStr), confidence > 8.0 {
+                // Very high confidence name extraction - prioritize this search
                 scanStage = .nameSearch
                 
                 // If we also have HP, use combined search
@@ -159,7 +159,7 @@ final class ScannerViewModel {
             
             // If everything failed, prepare for retry with different approach
             if !foundCard {
-                errorMessage = "Could not identify card from image. Try taking a clearer photo."
+                errorMessage = "Could not identify card from image. Try taking a clearer photo or adjusting lighting."
                 scanStage = .enhancedText // Ready for next attempt
             }
             
@@ -255,7 +255,7 @@ final class ScannerViewModel {
             // Clean the name - remove any non-alphanumeric characters except spaces
             let cleanName = name.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ")).inverted).joined()
             
-            // Try to search by exact name first
+            // Try exact name search first (highest priority)
             let exactQuery = ["q": "name:\"\(cleanName)\"", "page": "1", "pageSize": "10"]
             let exactResponse = try await pokemonTCGService.searchCards(query: exactQuery)
             
@@ -265,7 +265,7 @@ final class ScannerViewModel {
                 return true
             }
             
-            // If no exact match, try a fuzzy search
+            // If no exact match, try a fuzzy search with better query construction
             let fuzzyQuery = ["q": "name:*\(cleanName)*", "page": "1", "pageSize": "20"]
             let fuzzyResponse = try await pokemonTCGService.searchCards(query: fuzzyQuery)
             
@@ -276,15 +276,22 @@ final class ScannerViewModel {
                     
                     // Exact name match is highest priority
                     if card.name.lowercased() == cleanName.lowercased() {
-                        score += 10
+                        score += 15
                     }
                     // Name starts with our search term
                     else if card.name.lowercased().starts(with: cleanName.lowercased()) {
-                        score += 7
+                        score += 10
                     }
                     // Name contains our search term
                     else if card.name.lowercased().contains(cleanName.lowercased()) {
-                        score += 5
+                        score += 7
+                    }
+                    
+                    // Check for Pokemon name patterns
+                    if card.name.contains(" V") || card.name.contains(" GX") || 
+                       card.name.contains(" EX") || card.name.contains(" VMAX") || 
+                       card.name.contains(" VSTAR") {
+                        score += 3
                     }
                     
                     // Prefer newer cards (they tend to be more relevant)
@@ -366,13 +373,16 @@ final class ScannerViewModel {
     /// - Returns: Boolean indicating if search was successful
     private func searchByNumber(_ number: String, set: String?) async -> Bool {
         do {
+            // Clean the number - remove any non-digit characters except "/"
+            let cleanNumber = number.components(separatedBy: CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "/")).inverted).joined()
+            
             var query: [String: Any] = ["page": "1", "pageSize": "10"]
             
             // If we have both number and set, use them together for more accurate results
             if let set = set {
-                query["q"] = "number:\(number) set.id:\(set)"
+                query["q"] = "number:\"\(cleanNumber)\" set.id:\(set)"
             } else {
-                query["q"] = "number:\(number)"
+                query["q"] = "number:\"\(cleanNumber)\""
             }
             
             let response = try await pokemonTCGService.searchCards(query: query)
@@ -384,7 +394,7 @@ final class ScannerViewModel {
             } else {
                 // Try just the number without the set
                 if set != nil {
-                    query["q"] = "number:\(number)"
+                    query["q"] = "number:\"\(cleanNumber)\""
                     let fallbackResponse = try await pokemonTCGService.searchCards(query: query)
                     
                     if !fallbackResponse.data.isEmpty {
@@ -392,6 +402,41 @@ final class ScannerViewModel {
                         scanResult = fallbackResponse.data.first
                         return true
                     }
+                }
+                
+                // Try without quotes for more flexible matching
+                query["q"] = "number:*\(cleanNumber)*"
+                let flexibleResponse = try await pokemonTCGService.searchCards(query: query)
+                
+                if !flexibleResponse.data.isEmpty {
+                    // Calculate relevance scores for each card
+                    var scoredMatches = flexibleResponse.data.map { card -> (card: Card, score: Int) in
+                        var score = 0
+                        
+                        // Exact number match is highest priority
+                        if card.number == cleanNumber {
+                            score += 10
+                        }
+                        // Number contains our search term
+                        else if let cardNumber = card.number, cardNumber.contains(cleanNumber) {
+                            score += 5
+                        }
+                        
+                        // Set match if we have one
+                        if let set = set, card.set?.id.lowercased() == set.lowercased() {
+                            score += 6
+                        }
+                        
+                        return (card, score)
+                    }
+                    
+                    // Sort by score
+                    scoredMatches.sort { $0.score > $1.score }
+                    
+                    // Use the highest scored match
+                    potentialMatches = scoredMatches.map { $0.card }
+                    scanResult = potentialMatches.first
+                    return true
                 }
             }
             
@@ -914,7 +959,7 @@ final class ScannerViewModel {
             }
             
             // If we got here, we failed to identify the card
-            errorMessage = "Could not identify card. Try taking a clearer photo or selecting from the list."
+            errorMessage = "Could not identify card. Try taking a clearer photo, adjusting lighting, or selecting from the list."
             
             // Add a throw statement to make the catch block reachable
             if errorMessage != nil {
