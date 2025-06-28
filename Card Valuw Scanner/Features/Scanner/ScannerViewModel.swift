@@ -195,51 +195,32 @@ final class ScannerViewModel {
         do {
             // Build a combined query with both name and number
             var queryString = "name:*\(name)* number:\(number)"
-            
-            // Add set if available
             if let set = set {
                 queryString += " set.id:\(set)"
             }
-            
             let query = ["q": queryString, "page": "1", "pageSize": "10"]
             let response = try await pokemonTCGService.searchCards(query: query)
-            
             if !response.data.isEmpty {
-                // Calculate relevance scores for each card
+                // Use all available OCR features for scoring
+                let ocrName = name
+                let ocrNumber = number
+                let ocrSet = set
+                let ocrHP = scanResult?.hp // Use last extracted HP if available
                 var scoredMatches = response.data.map { card -> (card: Card, score: Int) in
                     var score = 0
-                    
-                    // Exact name match is highest priority
-                    if card.name.lowercased() == name.lowercased() {
-                        score += 10
-                    }
-                    // Partial name match
-                    else if card.name.lowercased().contains(name.lowercased()) {
-                        score += 5
-                    }
-                    
-                    // Exact number match
-                    if card.number == number {
-                        score += 8
-                    }
-                    
-                    // Set match if we have one
-                    if let set = set, card.set?.id.lowercased() == set.lowercased() {
-                        score += 6
-                    }
-                    
+                    if card.number == ocrNumber { score += 15 }
+                    if let ocrSet = ocrSet, let cardSet = card.set?.id, cardSet.lowercased() == ocrSet.lowercased() { score += 12 }
+                    if card.name.lowercased() == ocrName.lowercased() { score += 10 }
+                    if let ocrHP = ocrHP, card.hp == ocrHP { score += 8 }
+                    if card.name.lowercased().contains(ocrName.lowercased()) { score += 5 }
+                    if let cardNumber = card.number, cardNumber.contains(ocrNumber) { score += 3 }
                     return (card, score)
                 }
-                
-                // Sort by score
                 scoredMatches.sort { $0.score > $1.score }
-                
-                // Use the highest scored match
                 potentialMatches = scoredMatches.map { $0.card }
                 scanResult = potentialMatches.first
                 return true
             }
-            
             return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
@@ -252,113 +233,36 @@ final class ScannerViewModel {
     /// - Returns: Boolean indicating if search was successful
     private func searchByName(_ name: String) async -> Bool {
         do {
-            // Clean the name - remove any non-alphanumeric characters except spaces
             let cleanName = name.components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " ")).inverted).joined()
-            
-            // Try exact name search first (highest priority)
             let exactQuery = ["q": "name:\"\(cleanName)\"", "page": "1", "pageSize": "10"]
             let exactResponse = try await pokemonTCGService.searchCards(query: exactQuery)
-            
             if let firstCard = exactResponse.data.first {
                 scanResult = firstCard
                 potentialMatches = exactResponse.data
                 return true
             }
-            
-            // If no exact match, try a fuzzy search with better query construction
             let fuzzyQuery = ["q": "name:*\(cleanName)*", "page": "1", "pageSize": "20"]
             let fuzzyResponse = try await pokemonTCGService.searchCards(query: fuzzyQuery)
-            
             if !fuzzyResponse.data.isEmpty {
-                // Calculate relevance scores for each card
+                let ocrName = cleanName
+                let ocrNumber = scanResult?.number
+                let ocrSet = scanResult?.set?.id
+                let ocrHP = scanResult?.hp
                 var scoredMatches = fuzzyResponse.data.map { card -> (card: Card, score: Int) in
                     var score = 0
-                    
-                    // Exact name match is highest priority
-                    if card.name.lowercased() == cleanName.lowercased() {
-                        score += 15
-                    }
-                    // Name starts with our search term
-                    else if card.name.lowercased().starts(with: cleanName.lowercased()) {
-                        score += 10
-                    }
-                    // Name contains our search term
-                    else if card.name.lowercased().contains(cleanName.lowercased()) {
-                        score += 7
-                    }
-                    
-                    // Check for Pokemon name patterns
-                    if card.name.contains(" V") || card.name.contains(" GX") || 
-                       card.name.contains(" EX") || card.name.contains(" VMAX") || 
-                       card.name.contains(" VSTAR") {
-                        score += 3
-                    }
-                    
-                    // Prefer newer cards (they tend to be more relevant)
-                    if let set = card.set {
-                        // More recent cards get higher scores
-                        let dateFormatter = DateFormatter()
-                        dateFormatter.dateFormat = "yyyy/MM/dd"
-                        if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
-                            let now = Date()
-                            let timeInterval = now.timeIntervalSince(date)
-                            // Cards from the last 2 years get a bonus
-                            if timeInterval < 60*60*24*365*2 { // 2 years in seconds
-                                score += 3
-                            }
-                        }
-                    }
-                    
+                    if let ocrNumber = ocrNumber, card.number == ocrNumber { score += 15 }
+                    if let ocrSet = ocrSet, let cardSet = card.set?.id, cardSet.lowercased() == ocrSet.lowercased() { score += 12 }
+                    if card.name.lowercased() == ocrName.lowercased() { score += 10 }
+                    if let ocrHP = ocrHP, card.hp == ocrHP { score += 8 }
+                    if card.name.lowercased().contains(ocrName.lowercased()) { score += 5 }
+                    if let ocrNumber = ocrNumber, let cardNumber = card.number, cardNumber.contains(ocrNumber) { score += 3 }
                     return (card, score)
                 }
-                
-                // Sort by score
                 scoredMatches.sort { $0.score > $1.score }
-                
-                // Use the highest scored match
                 potentialMatches = scoredMatches.map { $0.card }
                 scanResult = potentialMatches.first
                 return true
-            } else {
-                // Try an even more lenient search by splitting the name and searching for parts
-                let nameParts = cleanName.split(separator: " ")
-                if nameParts.count > 1, let firstPart = nameParts.first {
-                    let partQuery = ["q": "name:*\(firstPart)*", "page": "1", "pageSize": "20"]
-                    let partResponse = try await pokemonTCGService.searchCards(query: partQuery)
-                    
-                    if !partResponse.data.isEmpty {
-                        // Calculate relevance scores for each card
-                        var scoredMatches = partResponse.data.map { card -> (card: Card, score: Int) in
-                            var score = 0
-                            
-                            // Check how many name parts match
-                            let cardNameLower = card.name.lowercased()
-                            var matchedParts = 0
-                            
-                            for part in nameParts {
-                                if cardNameLower.contains(part.lowercased()) {
-                                    matchedParts += 1
-                                }
-                            }
-                            
-                            // Score based on percentage of parts matched
-                            let matchPercentage = Double(matchedParts) / Double(nameParts.count)
-                            score += Int(matchPercentage * 10)
-                            
-                            return (card, score)
-                        }
-                        
-                        // Sort by score
-                        scoredMatches.sort { $0.score > $1.score }
-                        
-                        // Use the highest scored match
-                        potentialMatches = scoredMatches.map { $0.card }
-                        scanResult = potentialMatches.first
-                        return true
-                    }
-                }
             }
-            
             return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
@@ -373,73 +277,34 @@ final class ScannerViewModel {
     /// - Returns: Boolean indicating if search was successful
     private func searchByNumber(_ number: String, set: String?) async -> Bool {
         do {
-            // Clean the number - remove any non-digit characters except "/"
             let cleanNumber = number.components(separatedBy: CharacterSet.decimalDigits.union(CharacterSet(charactersIn: "/")).inverted).joined()
-            
             var query: [String: Any] = ["page": "1", "pageSize": "10"]
-            
-            // If we have both number and set, use them together for more accurate results
             if let set = set {
                 query["q"] = "number:\"\(cleanNumber)\" set.id:\(set)"
             } else {
                 query["q"] = "number:\"\(cleanNumber)\""
             }
-            
             let response = try await pokemonTCGService.searchCards(query: query)
-            
             if !response.data.isEmpty {
-                potentialMatches = response.data
-                scanResult = response.data.first
+                let ocrName = scanResult?.name
+                let ocrNumber = cleanNumber
+                let ocrSet = set
+                let ocrHP = scanResult?.hp
+                var scoredMatches = response.data.map { card -> (card: Card, score: Int) in
+                    var score = 0
+                    if card.number == ocrNumber { score += 15 }
+                    if let ocrSet = ocrSet, let cardSet = card.set?.id, cardSet.lowercased() == ocrSet.lowercased() { score += 12 }
+                    if let ocrName = ocrName, card.name.lowercased() == ocrName.lowercased() { score += 10 }
+                    if let ocrHP = ocrHP, card.hp == ocrHP { score += 8 }
+                    if let ocrName = ocrName, card.name.lowercased().contains(ocrName.lowercased()) { score += 5 }
+                    if let cardNumber = card.number, cardNumber.contains(ocrNumber) { score += 3 }
+                    return (card, score)
+                }
+                scoredMatches.sort { $0.score > $1.score }
+                potentialMatches = scoredMatches.map { $0.card }
+                scanResult = potentialMatches.first
                 return true
-            } else {
-                // Try just the number without the set
-                if set != nil {
-                    query["q"] = "number:\"\(cleanNumber)\""
-                    let fallbackResponse = try await pokemonTCGService.searchCards(query: query)
-                    
-                    if !fallbackResponse.data.isEmpty {
-                        potentialMatches = fallbackResponse.data
-                        scanResult = fallbackResponse.data.first
-                        return true
-                    }
-                }
-                
-                // Try without quotes for more flexible matching
-                query["q"] = "number:*\(cleanNumber)*"
-                let flexibleResponse = try await pokemonTCGService.searchCards(query: query)
-                
-                if !flexibleResponse.data.isEmpty {
-                    // Calculate relevance scores for each card
-                    var scoredMatches = flexibleResponse.data.map { card -> (card: Card, score: Int) in
-                        var score = 0
-                        
-                        // Exact number match is highest priority
-                        if card.number == cleanNumber {
-                            score += 10
-                        }
-                        // Number contains our search term
-                        else if let cardNumber = card.number, cardNumber.contains(cleanNumber) {
-                            score += 5
-                        }
-                        
-                        // Set match if we have one
-                        if let set = set, card.set?.id.lowercased() == set.lowercased() {
-                            score += 6
-                        }
-                        
-                        return (card, score)
-                    }
-                    
-                    // Sort by score
-                    scoredMatches.sort { $0.score > $1.score }
-                    
-                    // Use the highest scored match
-                    potentialMatches = scoredMatches.map { $0.card }
-                    scanResult = potentialMatches.first
-                    return true
-                }
             }
-            
             return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
@@ -452,81 +317,28 @@ final class ScannerViewModel {
     /// - Returns: Boolean indicating if search was successful
     private func searchByHP(_ hp: String) async -> Bool {
         do {
-            // HP is less specific, but we can still try
             let query = ["q": "hp:\(hp)", "page": "1", "pageSize": "20"]
             let response = try await pokemonTCGService.searchCards(query: query)
-            
             if !response.data.isEmpty {
-                // Calculate relevance scores for each card
+                let ocrName = scanResult?.name
+                let ocrNumber = scanResult?.number
+                let ocrSet = scanResult?.set?.id
+                let ocrHP = hp
                 var scoredMatches = response.data.map { card -> (card: Card, score: Int) in
                     var score = 0
-                    
-                    // Exact HP match is highest priority
-                    if card.hp == hp {
-                        score += 10
-                    } else {
-                        // If not exact match, calculate how close the HP values are
-                        if let cardHP = Int(card.hp ?? "0"), let searchHP = Int(hp) {
-                            let difference = abs(cardHP - searchHP)
-                            if difference <= 10 {
-                                // Very close match
-                                score += 8
-                            } else if difference <= 30 {
-                                // Somewhat close match
-                                score += 5
-                            } else if difference <= 50 {
-                                // Distant match
-                                score += 2
-                            }
-                        }
-                    }
-                    
-                    // Prefer newer cards (they tend to be more relevant)
-                    if let set = card.set {
-                        // More recent cards get higher scores
-                        let dateFormatter = DateFormatter()
-                        dateFormatter.dateFormat = "yyyy/MM/dd"
-                        if let releaseDate = set.releaseDate, let date = dateFormatter.date(from: releaseDate) {
-                            let now = Date()
-                            let timeInterval = now.timeIntervalSince(date)
-                            // Cards from the last 2 years get a bonus
-                            if timeInterval < 60*60*24*365*2 { // 2 years in seconds
-                                score += 3
-                            }
-                        }
-                    }
-                    
-                    // Prefer certain card types that are more popular
-                    if let types = card.types {
-                        let popularTypes = ["Fire", "Water", "Electric", "Psychic", "Dragon"]
-                        for type in types {
-                            if popularTypes.contains(type) {
-                                score += 1
-                                break
-                            }
-                        }
-                    }
-                    
+                    if let ocrNumber = ocrNumber, card.number == ocrNumber { score += 15 }
+                    if let ocrSet = ocrSet, let cardSet = card.set?.id, cardSet.lowercased() == ocrSet.lowercased() { score += 12 }
+                    if let ocrName = ocrName, card.name.lowercased() == ocrName.lowercased() { score += 10 }
+                    if card.hp == ocrHP { score += 8 }
+                    if let ocrName = ocrName, card.name.lowercased().contains(ocrName.lowercased()) { score += 5 }
+                    if let ocrNumber = ocrNumber, let cardNumber = card.number, cardNumber.contains(ocrNumber) { score += 3 }
                     return (card, score)
                 }
-                
-                // Sort by score
                 scoredMatches.sort { $0.score > $1.score }
-                
-                // Use the highest scored match
                 potentialMatches = scoredMatches.map { $0.card }
                 scanResult = potentialMatches.first
-                
-                // If we have a high-confidence match, return true
-                if let topScore = scoredMatches.first?.score, topScore >= 8 {
-                    return true
-                }
-                
-                // Otherwise, we'll show these as potential matches
-                errorMessage = "Multiple cards found with HP \(hp). Please select the correct card from the list or try scanning again."
-                return false // Return false since we need user intervention
+                return true
             }
-            
             return false
         } catch {
             errorMessage = "Error searching for card: \(error.localizedDescription)"
