@@ -406,6 +406,18 @@ struct ScannerView: View {
                             .cornerRadius(12)
                         }
                     }
+                    
+                    Button(action: {
+                        showPotentialMatches = true
+                    }) {
+                        Text("Not the right card? View Potential Matches")
+                            .font(.subheadline)
+                            .foregroundColor(.blue)
+                            .padding(.vertical, 8)
+                            .frame(maxWidth: .infinity)
+                            .background(Color.blue.opacity(0.08))
+                            .cornerRadius(8)
+                    }
                 }
                 .padding()
                 .background(Color.gray.opacity(0.1))
