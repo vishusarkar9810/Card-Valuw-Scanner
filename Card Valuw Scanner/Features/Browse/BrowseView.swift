@@ -24,6 +24,8 @@ struct BrowseView: View {
                     loadingView
                 } else if let errorMessage = viewModel.errorMessage {
                     errorView(errorMessage)
+                } else if !searchText.isEmpty && selectedSet == nil && !viewModel.filteredCards.isEmpty {
+                    globalCardSearchResultsView
                 } else if selectedSet != nil {
                     cardsInSetView
                 } else {
@@ -35,6 +37,8 @@ struct BrowseView: View {
             .onChange(of: searchText) { _, newValue in
                 if selectedSet != nil {
                     viewModel.searchCardsInSet(searchText: newValue)
+                } else if !newValue.isEmpty {
+                    Task { await viewModel.searchCardsGlobally(searchText: newValue) }
                 } else {
                     viewModel.searchSets(searchText: newValue)
                 }
@@ -207,6 +211,20 @@ struct BrowseView: View {
             }
         }
         .navigationTitle(selectedSet?.name ?? "Cards")
+    }
+    
+    private var globalCardSearchResultsView: some View {
+        ScrollView {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 160))], spacing: 16) {
+                ForEach(viewModel.filteredCards) { card in
+                    CardGridItem(card: card)
+                        .onTapGesture {
+                            selectedCard = card
+                        }
+                }
+            }
+            .padding()
+        }
     }
     
     // MARK: - Helper Functions

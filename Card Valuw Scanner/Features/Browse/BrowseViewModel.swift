@@ -177,4 +177,26 @@ final class BrowseViewModel {
             }
         }
     }
+    
+    /// Global card search by name or number
+    /// - Parameter searchText: The search text
+    @MainActor
+    func searchCardsGlobally(searchText: String) async {
+        if searchText.isEmpty {
+            filteredCards = []
+            return
+        }
+        isLoading = true
+        errorMessage = nil
+        do {
+            let query = ["q": "name:*\(searchText)*", "page": "1", "pageSize": "50"]
+            let response = try await pokemonTCGService.searchCards(query: query)
+            filteredCards = response.data
+            isLoading = false
+        } catch {
+            errorMessage = "Error searching cards: \(error.localizedDescription)"
+            filteredCards = []
+            isLoading = false
+        }
+    }
 } 
