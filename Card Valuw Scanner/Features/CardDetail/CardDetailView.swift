@@ -109,6 +109,11 @@ struct CardDetailView: View {
                 
                 Divider()
                 
+                // Shop on eBay button
+                shopOnEbaySection()
+                
+                Divider()
+                
                 // Related cards
                 if !model.relatedCards.isEmpty {
                     RelatedCardsView(cards: model.relatedCards) { selectedCard in
@@ -174,6 +179,100 @@ struct CardDetailView: View {
     }
     
     // MARK: - Helper Views
+    
+    @ViewBuilder
+    private func shopOnEbaySection() -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Image(systemName: "cart.fill")
+                    .font(.title3)
+                    .foregroundColor(.primary)
+                Text("Shop on eBay")
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+            }
+            .padding(.bottom, 4)
+            
+            Button(action: {
+                openEbaySearch()
+            }) {
+                VStack(alignment: .leading) {
+                    // eBay logo or fallback to SF Symbol
+                    if let image = UIImage(named: "ebay_logo") {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(height: 40)
+                            .padding(.vertical, 8)
+                    } else {
+                        // Fallback to SF Symbols if image is not found
+                        HStack {
+                            Text("eBay")
+                                .font(.system(size: 24, weight: .bold))
+                                .foregroundColor(Color(red: 0.85, green: 0, blue: 0))
+                            
+                            Spacer()
+                            
+                            Image(systemName: "tag.fill")
+                                .font(.system(size: 24))
+                                .foregroundColor(Color(red: 0.85, green: 0, blue: 0))
+                        }
+                        .frame(height: 40)
+                        .padding(.vertical, 8)
+                    }
+                    
+                    Text("Find this card on eBay")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    // Description text
+                    Text("Search for \(card.name) \(card.set?.name ?? "") on eBay")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
+        }
+        .padding()
+        .background(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.blue.opacity(0.3), lineWidth: 1.5)
+                .background(Color(.systemBackground))
+        )
+        .cornerRadius(12)
+    }
+    
+    private func openEbaySearch() {
+        // Create search query with card name, set name, and number
+        var searchQuery = card.name
+        
+        if let set = card.set?.name {
+            searchQuery += " \(set)"
+        }
+        
+        if let number = card.number {
+            searchQuery += " \(number)/\(card.set?.total ?? 0)"
+        }
+        
+        // Add "Pokemon Card" to make the search more specific
+        searchQuery += " Pokemon Card"
+        
+        // Create URL with encoded search query
+        if let encodedQuery = searchQuery.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
+           let url = URL(string: "https://www.ebay.com/sch/i.html?_nkw=\(encodedQuery)") {
+            UIApplication.shared.open(url, options: [:], completionHandler: nil)
+        }
+    }
     
     @ViewBuilder
     private func premiumFeatureLockedView(feature: PremiumFeature) -> some View {
