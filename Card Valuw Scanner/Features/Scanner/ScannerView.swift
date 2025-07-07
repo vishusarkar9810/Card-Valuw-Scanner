@@ -176,22 +176,6 @@ struct ScannerView: View {
             Spacer()
             
             VStack(spacing: 12) {
-                // New Live Scanning Button
-                Button(action: {
-                    showLiveScanner = true
-                }) {
-                    HStack {
-                        Image(systemName: "viewfinder.circle")
-                        Text("Live Card Scanning")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.green)
-                    .cornerRadius(12)
-                }
-                
                 Button(action: {
                     showCamera = true
                 }) {
@@ -204,22 +188,6 @@ struct ScannerView: View {
                     .padding()
                     .frame(maxWidth: .infinity)
                     .background(Color.blue)
-                    .cornerRadius(12)
-                }
-                
-                // Fixed button for photo library
-                Button(action: {
-                    showPhotoLibrary = true
-                }) {
-                    HStack {
-                        Image(systemName: "photo")
-                        Text("Choose from Library")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.blue)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.blue.opacity(0.1))
                     .cornerRadius(12)
                 }
             }
@@ -603,22 +571,6 @@ struct ScannerView: View {
             VStack(spacing: 12) {
                 Button(action: {
                     model.reset()
-                    showLiveScanner = true
-                }) {
-                    HStack {
-                        Image(systemName: "viewfinder.circle")
-                        Text("Try Live Card Scanner")
-                    }
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .padding()
-                    .frame(maxWidth: .infinity)
-                    .background(Color.green)
-                    .cornerRadius(12)
-                }
-                
-                Button(action: {
-                    model.reset()
                     showCamera = true
                 }) {
                     HStack {
@@ -777,9 +729,7 @@ struct ScannerView: View {
         NavigationStack {
             List {
                 Section(header: Text("Scanning Modes")) {
-                    tipRow(icon: "viewfinder.circle", title: "Live Card Scanning", description: "Automatically detects card edges and captures when stable. Best for quick scanning.")
                     tipRow(icon: "camera", title: "Manual Photo", description: "Take a photo manually. Good for difficult lighting conditions.")
-                    tipRow(icon: "photo", title: "Photo Library", description: "Select existing photos of cards from your library.")
                 }
                 
                 Section(header: Text("General Tips")) {
@@ -799,7 +749,6 @@ struct ScannerView: View {
                 Section(header: Text("Troubleshooting")) {
                     tipRow(icon: "bolt.fill", title: "Use Flash", description: "In low light, enable the flashlight using the lightning bolt icon.")
                     tipRow(icon: "arrow.clockwise", title: "Try Different Angles", description: "If scanning fails, try a slightly different angle to reduce glare.")
-                    tipRow(icon: "photo", title: "Use Photo Library", description: "For better results, take a photo first, then crop it closely around the card.")
                     tipRow(icon: "hand.tap", title: "Manual Selection", description: "If multiple matches are found, tap the correct card from the list.")
                 }
             }
